@@ -201,6 +201,9 @@ button.qopt:hover{border-color:var(--ink)}
 .cmpme td{background:color-mix(in srgb,var(--hl) 14%,transparent)}.cmpimg{width:36px;height:36px;object-fit:cover;border-radius:6px;flex:none}
 .sniprow img{display:block;max-width:100%;height:auto;max-height:64px;border-radius:4px;border:1px solid var(--line);background:#fff}
 tr.sniprow td{padding:0 0 8px;border-top:0}
+.selbox{width:26px;height:26px;border:2px solid var(--muted);border-radius:6px;display:grid;place-items:center;flex:none;font-weight:800;color:var(--hl-ink,#000)}
+.pcard-on{outline:2px solid var(--hl)}.pcard-on .selbox{background:var(--hl);border-color:var(--hl)}
+.selbar{align-items:center;gap:10px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
 .cmpbtn{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;text-align:left;border:2px solid var(--hl);border-radius:10px;padding:10px 12px;font-weight:700;background:none;color:var(--ink)}
 .cmpcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
 .cmpcard{display:flex;flex-direction:column;gap:8px;padding:12px}.cmphead{display:flex;gap:10px;align-items:center}
@@ -555,7 +558,9 @@ function vProducts(){
  const ps=Object.values(S.products).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
  return `<div class="stack">
  <div class="spread"><div><h1>Saved checks</h1><p class="muted small" style="margin:4px 0 0">Every pack you've checked, newest first. Tap one to see its results again.</p></div>
- <div class="row"><button class="primary" data-act="nav" data-v="quick">Check a pack</button><button data-act="newProduct">Add a product by hand</button>${ps.length?`<button class="ghost" data-act="clearAsk">Clear all</button>`:''}</div></div>
+ <div class="row"><button class="primary" data-act="nav" data-v="quick">Check a pack</button><button data-act="newProduct">Add a product by hand</button>${ps.length?`<button class="ghost" data-act="selMode">${S.selMode?'Cancel selecting':'Select'}</button><button class="ghost" data-act="clearAsk">Clear all</button>`:''}</div></div>
+ ${S.selMode?`<div class="panel row selbar"><b>${(S.sel||[]).length} selected</b><button class="small ghost" data-act="selAll">Select all</button><button class="small primary" data-act="selDelAsk" ${(S.sel||[]).length?'':'disabled'}>Delete selected</button></div>
+  ${S.selConfirm?`<div class="banner err stack" style="gap:8px"><b>Delete ${(S.sel||[]).length} saved check${(S.sel||[]).length===1?'':'s'} and their photos from this device?</b><span class="small">This can't be undone.</span><div class="row"><button class="small primary" data-act="selDelYes">Delete</button><button class="small ghost" data-act="selDelNo">Keep them</button></div></div>`:''}`:''}
  ${(()=>{const jobs=ps.filter(p=>p.job);if(!jobs.length)return '';const q=jobs.filter(p=>['ready','rereview'].includes(jobStatus(p)));const ch=jobs.filter(p=>jobStatus(p)==='changes');
   const row=p=>`<button class="ocrow jobrow" data-act="openJob" data-id="${p.id}"><div class="spread"><b>${esc(p.name||'Job')}</b>${jobChip(p)}</div><div class="small muted">${esc(marketInfo(p.job.market).name)} · SKU ${esc(p.sku||'—')} · ${esc(JOB_NEXT[jobStatus(p)])}</div><div class="small" style="color:var(--fails)">${esc(jobBlockers(p,true)[0]||'')}</div></button>`;
   return `<div class="panel stack"><h2 style="margin:0">Packaging jobs</h2>${q.length?`<div class="small"><b>QA queue (${q.length})</b></div>${q.map(row).join('')}`:'<div class="small muted">Nothing waiting for QA.</div>'}${ch.length?`<div class="small"><b>Changes requested (${ch.length})</b></div>${ch.map(row).join('')}`:''}
@@ -563,7 +568,8 @@ function vProducts(){
  ${S.confirmClear?`<div class="banner err stack" style="gap:8px"><b>Delete all ${ps.length} saved check${ps.length===1?'':'s'} and their photos from this device?</b><span class="small">This can't be undone. Download a backup first if you might need them. Market rules and the approval log are kept.</span>
   <div class="row"><button class="small" data-act="nav" data-v="data">Back up first</button><button class="small primary" data-act="clearYes">Delete all</button><button class="small ghost" data-act="clearNo">Cancel</button></div></div>`:''}
  ${loadingOr('p',ps.length?`<div class="plist">${ps.map(p=>{const aps=Object.values(S.approvals).filter(a=>a.productId===p.id&&a.status==='approved').length;const th=thumbOf(p);
-  return `<button class="panel pcard" data-act="open" data-id="${p.id}">${th?`<img class="pthumb" src="${esc(th)}" alt="">`:''}<div class="stack" style="gap:6px;min-width:0;flex:1"><div class="spread"><span class="label">${esc(p.brand||p.company||'No brand')}</span>${p.sample?'<span class="chip sample">SAMPLE DATA</span>':''}</div>
+  const on=S.selMode&&(S.sel||[]).includes(p.id);
+  return `<button class="panel pcard ${on?'pcard-on':''}" data-act="${S.selMode?'selTog':'open'}" data-id="${p.id}" ${S.selMode?`aria-pressed="${on}"`:''}>${S.selMode?`<span class="selbox" aria-hidden="true">${on?'✓':''}</span>`:''}${th?`<img class="pthumb" src="${esc(th)}" alt="">`:''}<div class="stack" style="gap:6px;min-width:0;flex:1"><div class="spread"><span class="label">${esc(p.brand||p.company||'No brand')}</span>${p.sample?'<span class="chip sample">SAMPLE DATA</span>':''}</div>
   <h3>${esc(p.name||'Untitled product')}</h3><div class="small muted mono">SKU ${esc(p.sku||'—')} · Pack ${esc(p.packVersion||'—')}</div>
   <div class="row small">${p.job?jobChip(p)+`<span class="muted">${esc(marketInfo(p.job.market).name)}${p.job.owner?' · '+esc(p.job.owner):''}</span>`:(p.confirmed?chip('meets','Values confirmed'):chip('needs','Values not confirmed'))+`<span class="muted">${(p.markets||[]).length} market${(p.markets||[]).length===1?'':'s'}</span><span class="muted">${aps} approved claim${aps===1?'':'s'}</span>`}</div></div></button>`}).join('')}</div>`
   :`<div class="panel"><h3>No products yet</h3><p class="muted">Add a product to start, or run the SAMPLE demo with an invented rice crispbread. Sample results are always labelled and can never be approved.</p></div>`)}
@@ -865,6 +871,9 @@ function vQuick(){
    const th=thumbOf(p);return `<button class="panel rcard" data-act="open" data-id="${p.id}">${th?`<img class="rthumb" src="${esc(th)}" alt="">`:`<span class="rthumb rthumb-none" aria-hidden="true">≡</span>`}<b>${esc(p.name||'Pack check')}</b><span class="small muted">${esc(p.job?(jobClaim(p)?.r.wording||'No claim chosen'):(top||'No claim yet'))}</span><span>${p.job?jobChip(p):top?chip('draft','Proposed · not approved'):''}</span>${o?`<span class="small" style="color:var(--fails)">${o} to fix</span>`:''}</button>`;}).join('')}</div></div>`:''}
  </div>`;}
 function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
+ // Checks saved before the dry-mix fix: one odd row used to trigger "How is this food eaten?". Clear it when fewer
+ // than three rows actually have a dry-mix value.
+ if(p.extracted.multiCol&&NUTS.filter(({k})=>p.extracted.nutrients?.[k]?.dry100!=null).length<3){p.extracted.multiCol=false;p.preparation=null;setTimeout(()=>saveProduct(p),0);}
  const noMk=!(p.markets||[]).length;const codes=noMk?['AU']:p.markets;const t=quickTop(p,codes);const open=openFlags(p);
  const unver=t.ms.filter(m=>!m.verified).map(m=>m.name);
  return `<div class="stack">
@@ -1147,6 +1156,13 @@ function copySheetHtml(p,rel){const e=esc,j=p.job||{};const snap=rel?rel.snap:co
 /* ---------- barcode: open a saved check, or look the product up in Open Food Facts ---------- */
 var scanCtl=null;
 function vScan(){const link=S.scanLink&&S.products[S.scanLink];
+ if(S.scanFound){const q=S.products[S.scanFound.id];if(q){const th=thumbOf(q);return `<div class="stack" style="max-width:560px;margin:0 auto">
+  <div><button class="ghost" data-act="scanClose">← Back</button></div>
+  <h1 style="margin:0">You've checked this before</h1>
+  <div class="panel phead">${th?`<img src="${esc(th)}" alt="">`:''}<div class="stack" style="gap:2px;min-width:0"><span class="label">${esc(q.brand||'')}</span><b class="phname">${esc(q.name||'Pack check')}</b><span class="small muted mono">Barcode ${esc(S.scanFound.code)} · ${day(q.updatedAt||q.createdAt)}</span></div></div>
+  <button class="primary big" data-act="scanOpenSaved">Open the saved check</button>
+  <button class="big" data-act="scanStartNew">Start a new check</button>
+  <p class="small muted" style="margin:0">A new check looks the product up again and keeps the saved one as it is.</p></div>`;}}
  return `<div class="stack" style="max-width:560px;margin:0 auto">
  <div><button class="ghost" data-act="scanClose">← Back</button></div>
  <h1 style="margin:0">${link?'Link a barcode':'Scan a barcode'}</h1>
@@ -1171,7 +1187,9 @@ async function handleBarcode(raw){const code=cleanCode(raw);if(code.length<6){sc
  // Linking a barcode to an existing check.
  if(S.scanLink){const p=S.products[S.scanLink];S.scanLink=null;if(p){p.barcode=code;await saveProduct(p);S.pid=p.id;S.view='result';toast('Barcode linked.');render();}return;}
  const mine=Object.values(S.products).filter(p=>cleanCode(p.barcode)===code).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''))[0];
- if(mine){S.pid=mine.id;S.view=mine.extracted?'result':'product';toast('Opened your saved check.');render();return;}
+ // Already checked before: let the person choose to open it or start again.
+ if(mine&&!S.scanFresh){scanStop();S.scanFound={id:mine.id,code};S.view='scan';render();return;}
+ S.scanFresh=false;S.scanFound=null;
  S.view='scan';S.busy='';render();scanMsg('Looking up '+code+' in Open Food Facts…');
  try{const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_en,brands,ingredients_text_en,ingredients_text,nutriments,serving_quantity,serving_size,image_front_url,image_nutrition_url,image_ingredients_url,allergens_tags,traces_tags,countries_tags,categories_tags,lang,ingredients_text_fr,ingredients_text_es,ingredients_text_de`);
   const j=await r.json();if(j.status!==1||!j.product){scanMsg(`Barcode ${code} isn't in Open Food Facts. Take a photo of the panel instead.`);S.offMiss=code;render();return;}
@@ -1753,8 +1771,10 @@ document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-ac
   const n=(p.job.releases||[]).length+1;const r={n,at:now(),by:S.me.id,qaBy:p.job.qa.by,qaAt:p.job.qa.at,hash:copyHash(p),snap:copySnap(p)};p.job.releases=[...(p.job.releases||[]),r];jobLog(p,'Released copy sheet',`revision ${n}`);await saveProduct(p);toast(`Released revision ${n}.`);break;}
  case 'jobSheet':{const st=jobStatus(p);const rel=st==='released'?(p.job.releases||[]).slice(-1)[0]:null;saveFile(`Copy sheet - ${(p.sku||'SKU').replace(/[^\w.-]+/g,'_')} - ${p.job.market} - ${rel?'rev'+rel.n:'DRAFT'}.html`,copySheetHtml(p,rel),'text/html');return;}
  case 'jobSheetRel':{const rel=(p.job.releases||[]).find(r=>r.n===+b.dataset.n);if(!rel)return;saveFile(`Copy sheet - ${(p.sku||'SKU').replace(/[^\w.-]+/g,'_')} - ${p.job.market} - rev${rel.n}.html`,copySheetHtml(p,rel),'text/html');return;}
- case 'scanOpen':case 'scanLink':S.scanLink=a==='scanLink'?p?.id:null;S.scanMsg='';S.offMiss=null;S.view='scan';window.scrollTo(0,0);render();setTimeout(scanStart,60);return;
- case 'scanClose':scanStop();{const l=S.scanLink;S.scanLink=null;S.view=l?'result':'quick';}break;
+ case 'scanOpen':case 'scanLink':S.scanFound=null;S.scanFresh=false;S.scanLink=a==='scanLink'?p?.id:null;S.scanMsg='';S.offMiss=null;S.view='scan';window.scrollTo(0,0);render();setTimeout(scanStart,60);return;
+ case 'scanOpenSaved':{const id=S.scanFound?.id;S.scanFound=null;if(!id||!S.products[id])break;S.pid=id;S.view=S.products[id].extracted?'result':'product';window.scrollTo(0,0);break;}
+ case 'scanStartNew':{const code=S.scanFound?.code;S.scanFound=null;S.scanFresh=true;return handleBarcode(code);}
+ case 'scanClose':S.scanFound=null;scanStop();{const l=S.scanLink;S.scanLink=null;S.view=l?'result':'quick';}break;
  case 'scanGo':{const v=$('#scanCode')?.value;scanStop();return handleBarcode(v);}
  case 'trLang':{const v=b.dataset.v;const cur=trLangs();S.trLangs=cur.includes(v)?cur.filter(c=>c!==v):[...cur,v];break;}
  case 'trAll':S.trLangs=Object.keys(TR);break;
@@ -1796,6 +1816,13 @@ document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-ac
  case 'newSample':return newProduct(true);
  case 'step':S.step=b.dataset.s;S.err='';window.scrollTo(0,0);break;
  case 'delProduct':S.confirmDel=true;break;case 'delNo':S.confirmDel=false;break;
+ case 'selMode':S.selMode=!S.selMode;S.sel=[];S.selConfirm=false;break;
+ case 'selTog':{const id=b.dataset.id;const s=new Set(S.sel||[]);s.has(id)?s.delete(id):s.add(id);S.sel=[...s];S.selConfirm=false;break;}
+ case 'selAll':S.sel=Object.keys(S.products);break;
+ case 'selDelAsk':if((S.sel||[]).length)S.selConfirm=true;break;
+ case 'selDelNo':S.selConfirm=false;break;
+ case 'selDelYes':{let n=0;for(const id of S.sel||[]){const q=S.products[id];if(!q)continue;try{if(S.db){await S.db.doc('products/'+id).delete();for(const c of q.captures||[])for(const a of [c.assetId,c.origAssetId])if(a){try{await S.db.delBlob(a);}catch(e){}}}delete S.products[id];delete S.mem[id];n++;}catch(e){}}
+  if(S.sel.includes(S.pid))S.pid=null;S.sel=[];S.selConfirm=false;S.selMode=false;toast(`Deleted ${n} saved check${n===1?'':'s'}.`);break;}
  case 'clearAsk':S.confirmClear=true;break;
  case 'clearNo':S.confirmClear=false;break;
  case 'clearYes':{S.confirmClear=false;const ids=Object.keys(S.products);let n=0;
