@@ -292,6 +292,7 @@ function issuesFor(p){
   if(a===null||b===null){out[k]={type:'missing',note:(a===null?'Per serving':'Per 100')+' value is missing.'};continue;}
   if(ss){const exp=b*ss/100,tol=Math.max(exp*.2,NUT[k].unit==='g'?0.15:NUT[k].unit==='mg'?5:10);if(Math.abs(exp-a)>tol)out[k]={type:'conflict',note:`Per serving (${a}) doesn't match per 100 × serving size (expected ≈ ${fmt(exp,1)}).`};}}
  for(const {k} of NUTS){const n=ns[k];if(!n||NUT[k].unit==='kJ'||out[k])continue;const b=num(n.per100);if(b!==null&&toCanon(k,b,n.unit)>(NUT[k].unit==='mg'?100000:100))out[k]={type:'conflict',note:'More than 100 g per 100 g isn\'t possible. A decimal point was probably missed.'};}
+ const ssz=num(x.servingSize?.value);if(ssz)for(const {k} of NUTS){const n=ns[k];if(!n||NUT[k].unit==='kJ'||out[k])continue;const a=num(n.perServing);if(a!==null&&toCanon(k,a,n.unit)/(NUT[k].unit==='mg'?1000:1)>ssz)out[k]={type:'conflict',note:`${a} ${n.unit} per serving is more than the whole ${ssz} g serving. A decimal point was probably missed.`};}
  const s=num(ns.sugars_g?.per100),c=num(ns.carbohydrate_g?.per100);if(s!==null&&c!==null&&s>c)out.sugars_g={type:'conflict',note:'Sugars are higher than total carbohydrate.'};
  const sf=num(ns.fat_saturated_g?.per100),tf=num(ns.fat_total_g?.per100);if(sf!==null&&tf!==null&&sf>tf)out.fat_saturated_g={type:'conflict',note:'Saturated fat is higher than total fat.'};
  return out;}
@@ -687,6 +688,7 @@ function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
  <div class="qres">
  <div class="stack">
   <h2>Nutrition panel</h2>
+  ${p.extracted.perServeOnly?`<div class="banner small"><b>US-style panel (per serving only).</b> PackPick worked out the per 100 g column from the ${esc(p.extracted.servingSize?.value??'?')} g serving. US panels round small amounts (under 0.5 g shows as 0 g), so confirm exact values from the product spec before using claims that depend on them.</div>`:''}
   ${open.length?`<div class="banner err small"><b>${open.length} number${open.length>1?'s':''} ${open.length>1?'are':'is'} wrong or missing.</b> Fix ${open.length>1?'them':'it'} below (marked in red), or crop the photo to the table and read it again. Claims that use ${open.length>1?'them':'it'} are held back until then.<div class="row" style="margin-top:8px">${(()=>{const c=(p.captures||[]).find(x=>x.method!=='sample'&&x.method!=='text');return c?`<button class="small" data-act="crop" data-id="${c.id}">✂ Crop the photo</button>`:'';})()}</div></div>`:''}
   ${nipPanel(p)}
   <details ${p.extracted.ingredientsText&&!p.confirmed?'open':''}><summary>Ingredients${p.extracted.ingredientsText?' · check the spelling':' (none found)'}</summary><label class="fld">Used for ingredient claims and “No added sugar”. Fix any misread words.<textarea id="x-ing" data-f="ing">${esc(p.extracted.ingredientsText||'')}</textarea></label>
@@ -784,7 +786,7 @@ async function ocr(blob,onProg){
  finally{await w.terminate();}}
 function cleanNums(s){return String(s).replace(/(\d)\s*¢/g,'$1g').replace(/(\d)\s*[,·]\s*(\d)/g,'$1.$2').replace(/(\d)[oO]/g,(m,a)=>a+'0').replace(/[oO](\d)/g,(m,a)=>'0'+a).replace(/(\d)[lI|]/g,(m,a)=>a+'1').replace(/[lI|](\d)/g,(m,a)=>'1'+a);}
 // Row names, tolerant of the reader mixing up O/0 and I/l/1.
-const NUT_MATCH=[['fat_saturated_g',/s[a@]tur[a@]t/i],['fat_trans_g',/\btr[a@]ns\b/i],['sugars_g',/sug[a@]r/i],['dietary_fibre_g',/f[i1l|]b(re|er)/i],['energy_kj',/en[e3]rgy|kilojoule/i],['protein_g',/pr[o0]te[i1l|]n/i],['carbohydrate_g',/c[a@]rb[o0]/i],['sodium_mg',/s[o0][d0o][i1l|]um(?!\s*bicarb)/i],['fat_total_g',/\bf[a@]t\b/i]];
+const NUT_MATCH=[['fat_saturated_g',/s[a@]tur[a@]t/i],['fat_trans_g',/\btr[a@]ns\b/i],['sugars_g',/sug[a@]r/i],['dietary_fibre_g',/f[i1l|]b(re|er)/i],['energy_kj',/en[e3]rgy|kilojoule|calories(?!\s*a\s*day)/i],['protein_g',/pr[o0]te[i1l|]n/i],['carbohydrate_g',/c[a@]rb[o0]/i],['sodium_mg',/s[o0][d0o][i1l|]um(?!\s*bicarb)/i],['fat_total_g',/\bf[a@]t(?![a-z])/i]];
 // Alternative readings of one number: the trailing "g" misread as 9 or 4, or a lost decimal point.
 function numCands(t){const s=/^0\d+$/.test(t.s)?'0.'+t.s.slice(1):t.s,out=[{v:t.v,c:0}];const dot=s.indexOf('.');
  if(dot>=0&&s.length-dot-1>=2&&/[94]$/.test(s))out.push({v:+s.slice(0,-1),c:1,strong:true});
@@ -794,7 +796,7 @@ function numCands(t){const s=/^0\d+$/.test(t.s)?'0.'+t.s.slice(1):t.s,out=[{v:t.
  return out;}
 // Pick the per-serving / per-100 pair that agrees with the serving size, preferring the fewest changes.
 function pickPair(A,B,ss){let best=null;
- for(const a of numCands(A))for(const b of numCands(B)){const e=b.v*ss/100;const tol=Math.max(e*.15,.06,a.v>=10?.5:0);const fit=Math.abs(a.v-e)<=tol;
+ for(const a of numCands(A))for(const b of numCands(B)){if(b.v>100||a.v>ss)continue;const e=b.v*ss/100;const tol=Math.max(e*.15,.06,a.v>=10?.5:0);const fit=Math.abs(a.v-e)<=tol;
   const score=(fit?0:10)+(a.c+b.c)*.3-((a.strong?1:0)+(b.strong?1:0))*.5;
   if(!best||score<best.score)best={a:a.v,b:b.v,score,fit,changed:(a.c+b.c)>0};}
  return best;}
@@ -802,15 +804,17 @@ function pickPair(A,B,ss){let best=null;
 function rowScore(n,ss){if(!n)return 9;if(n.perServing==null&&n.per100==null)return 8;if(n.perServing==null||n.per100==null)return 6;
  let s=n.flag?(n.flag.type==='blurry'?1:4):0;if(ss&&n.unit!=='kJ'){const e=n.per100*ss/100,tol=Math.max(e*.2,n.unit==='mg'?5:.15);if(Math.abs(n.perServing-e)>tol)s+=5;}return s;}
 function mergeNip(a,b){if(!b)return a;const out={...a,nutrients:{}};
- if(a.servingSize.value==null&&b.servingSize.value!=null)out.servingSize=b.servingSize;if(!a.servingsPerPack&&b.servingsPerPack)out.servingsPerPack=b.servingsPerPack;out.liquid=a.liquid||b.liquid;
+ if(a.servingSize.value==null&&b.servingSize.value!=null)out.servingSize=b.servingSize;if(!a.servingsPerPack&&b.servingsPerPack)out.servingsPerPack=b.servingsPerPack;out.liquid=a.liquid||b.liquid;out.perServeOnly=a.perServeOnly||b.perServeOnly;
  const ss=out.servingSize.value;for(const {k} of NUTS){const x=a.nutrients[k],y=b.nutrients[k];const sx=rowScore(x,ss),sy=rowScore(y,ss);const pick=sy<sx?y:x;if(pick)out.nutrients[k]=pick;}
  return out;}
 function parseNip(lines){
  const out={nutrients:{},servingSize:{value:null,unit:'g'},servingsPerPack:'',liquid:false};
- const all=cleanNums(lines.map(l=>l.text).join('\n'));
- const ss=all.match(/serving\s*size[^\d\n]*(\d+(?:\.\d+)?)\s*(g|ml)/i);if(ss)out.servingSize={value:+ss[1],unit:/ml/i.test(ss[2])?'mL':'g'};
- const sp=all.match(/servings?\s*per\s*(?:package|pack|container)[^\d\n]*((?:approx\.?\s*)?\d+(?:\.\d+)?)/i);if(sp)out.servingsPerPack=sp[1];
+ const all=cleanNums(lines.map(l=>l.text).join('\n')).replace(/\b(\d) (\d)(?=\s*servings?)/gi,'$1$2');
+ const ss=all.match(/serving\s*size[^\d\n]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/per\s*serv(?:ing|e)[\s:(]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/serv(?:ing|e)\s*[:(]?\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i);if(ss)out.servingSize={value:+ss[1],unit:/ml/i.test(ss[2])?'mL':'g'};
+ const sp=all.match(/((?:about\s*|approx\.?\s*)?\d+(?:\.\d+)?)\s*servings?\s*per\s*(?:package|pack|container)/i)||all.match(/servings?\s*per\s*(?:package|pack|container)[^\d\n]*((?:approx\.?\s*)?\d+(?:\.\d+)?)/i);if(sp)out.servingsPerPack=sp[1];
  if(/per\s*100\s*ml/i.test(all))out.liquid=true;
+ // US-style "Nutrition Facts" panels give amounts per serving only.
+ const perServeOnly=/nutrition\s*facts|amount\s*per\s*serving|daily\s*value/i.test(all)&&!/per\s*100|\/\s*100\s*g/i.test(all);out.perServeOnly=perServeOnly;
  for(const l of lines){const raw=String(l.text);
   const hit=NUT_MATCH.find(([k,re])=>re.test(raw));if(!hit)continue;const k=hit[0];
   const lm=raw.match(hit[1]);const rest=raw.slice(lm.index+lm[0].length).replace(/^[a-z ,:.\-–]*?(?=[\d\s(<]|$)/i,'');
@@ -820,9 +824,10 @@ function parseNip(lines){
   let toks=[...t.matchAll(/(\d+(?:\.\d+)?)\s*(kj|kcal|cal|mg|g|%)?/gi)].map(m=>{let s=m[1],v=+s;if(/^0\d+$/.test(s)){v=+('0.'+s.slice(1));lostDot=true;}return {v,s,u:(m[2]||'').toLowerCase()};}).filter(x=>x.u!=='%');
   if(/per\s*100/i.test(t))toks=toks.filter(x=>x.v!==100);
   if(k==='energy_kj'){const kj=toks.filter(x=>x.u==='kj');if(kj.length)toks=kj;else{const kc=toks.filter(x=>x.u==='kcal'||x.u==='cal');if(kc.length)toks=kc;}}
-  const unit=k==='energy_kj'?(toks[0]&&(toks[0].u==='kcal'||toks[0].u==='cal')?'kcal':'kJ'):k==='sodium_mg'?(toks.some(x=>x.u==='g')&&!toks.some(x=>x.u==='mg')?'g':'mg'):(toks.some(x=>x.u==='mg')&&!toks.some(x=>x.u==='g')?'mg':'g');
+  const unit=k==='energy_kj'?(toks[0]&&(toks[0].u==='kcal'||toks[0].u==='cal'||(!toks[0].u&&/calor/i.test(lm[0])))?'kcal':'kJ'):k==='sodium_mg'?(toks.some(x=>x.u==='g')&&!toks.some(x=>x.u==='mg')?'g':'mg'):(toks.some(x=>x.u==='mg')&&!toks.some(x=>x.u==='g')?'mg':'g');
   const n={unit,perServing:null,per100:null,flag:null};
-  if(toks.length>=2){n.perServing=toks[0].v;n.per100=toks[1].v;
+  if(perServeOnly&&toks.length){const ssz=out.servingSize.value;n.perServing=toks[0].v;n.per100=ssz?+fmt(toks[0].v*100/ssz,2):null;n.derived=true;}
+  else if(toks.length>=2){n.perServing=toks[0].v;n.per100=toks[1].v;
    const ssz=out.servingSize.value;
    if(ssz&&unit==='g'&&k!=='energy_kj'){const pk=pickPair(toks[0],toks[1],ssz);
     if(pk&&pk.changed&&pk.fit){n.perServing=pk.a;n.per100=pk.b;n.flag={type:'blurry',note:`Read as ${toks[0].s} / ${toks[1].s}. On photos the letter "g" often reads as a 9 or 4, and decimal points get lost, so PackPick suggests ${fmt(pk.a)} / ${fmt(pk.b)}, which matches the serving size. Check against the pack.`,status:'open'};}
@@ -835,7 +840,8 @@ function parseNip(lines){
   out.nutrients[k]=n;}
  return out;}
 function parseIngredients(text){const t=String(text).replace(/\r/g,'');const m=t.match(/ingredients?\s*[:\-.]?\s*([\s\S]*)/i);let s=m?m[1]:t;
- s=s.split(/\n\s*\n|\b(?:contains|allergens?|may contain|may be present|manufactured|nutrition\s+information|servings?\s+per|serving\s+size|ave\.?\s+quantity|average\s+quantity)\b/i)[0];return s.replace(/\s*\n\s*/g,' ').replace(/\s+/g,' ').trim().replace(/[\s\/|.,;:_\-]+$/,'');}
+ s=s.replace(/\n\s*\n/g,'\n').split(/\b(?:contains|allergens?|may contain|may be present|manufactured|nutrition\s+(?:information|facts)|\d*\s*servings?\s+per|serving\s+size|ave\.?\s+quantity|average\s+quantity|amount\s+per|store\s+in|best\s+before|made\s+in|packed\s+in|product\s+of)\b/i)[0];
+ const end=s.search(/\.\s*(\n|$)/);if(end>0)s=s.slice(0,end);return s.replace(/\s*\n\s*/g,' ').replace(/\s+/g,' ').trim().replace(/[\s\/|.,;:_\-]+$/,'');}
 async function extract(){const p=P();S.err='';const caps=p.captures||[];
  if(caps.length&&caps.every(c=>c.method==='sample')){applyExtraction(p,clone(SAMPLE_EXTRACTION));return;}
  S.busy='extract';S.ocrStep='Starting the photo reader…';render();
@@ -852,6 +858,7 @@ async function extract(){const p=P();S.err='';const caps=p.captures||[];
   const x={source:`On-device reading of ${imgs.length} photo${imgs.length===1?'':'s'}${texts.length?' and pasted text':''}, ${day(now())}`,servingSize:nip.servingSize,servingsPerPack:nip.servingsPerPack,nutrients:{},ingredientsText:ingTexts.map(parseIngredients).filter(Boolean).join(', '),warnings,transcript:transcript.join('\n\n')};
   for(const {k,unit} of NUTS)x.nutrients[k]=nip.nutrients[k]||{unit,perServing:null,per100:null,flag:{type:'missing',note:'Not found in the photo or text.',status:'open'}};
   if(nip.liquid)p.physical='liquid';
+  if(nip.perServeOnly)x.perServeOnly=true;
   const prev=p.extracted;if(prev){if(!x.ingredientsText&&prev.ingredientsText)x.ingredientsText=prev.ingredientsText;if(x.servingSize.value==null&&prev.servingSize?.value!=null)x.servingSize=prev.servingSize;if(!x.servingsPerPack&&prev.servingsPerPack)x.servingsPerPack=prev.servingsPerPack;}
   warnings.push('Photo reading is automatic and can misread small print. Check every value against the pack.');
   applyExtraction(p,x);
@@ -863,7 +870,7 @@ function autoAccept(p){const x=p.extracted,ss=num(x.servingSize?.value),iss=issu
  for(const {k,label} of NUTS){const n=x.nutrients[k];if(!n||!n.flag||n.flag.status!=='open')continue;const i=iss[k];const nm=label.replace('– ','').toLowerCase();const both=n.perServing==null&&n.per100==null;
   if(both){if(!MANDATORY_NIP.includes(k)){n.flag={...n.flag,status:'auto',note:'Not on this pack.'};}else n.flag={type:'missing',status:'open',orig:n.flag.orig,note:`No ${nm} found on the photo. Type it in from the pack.`};continue;}
   if(n.per100==null){n.flag={type:'missing',status:'open',orig:n.flag.orig,note:`The per 100 g ${nm} wasn't found. Type it in from the pack.`};continue;}
-  if(n.perServing==null){n.flag={...n.flag,status:'auto'};continue;}
+  if(n.perServing==null){n.flag={type:'missing',status:'open',orig:n.flag.orig,note:`Only one ${nm} number was found, so PackPick can't tell which column it belongs to. Type both numbers from the pack.`};continue;}
   if(i&&i.type==='conflict'){n.flag={type:'conflict',status:'open',orig:n.flag.orig,note:i.note+' Type the right number from the pack.'};continue;}
   if(!ss){n.flag={...n.flag,status:'open',note:'The serving size is missing, so this row couldn\'t be double-checked. Add the serving size.'};continue;}
   n.flag={...n.flag,status:'auto'};}}
