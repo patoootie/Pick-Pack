@@ -201,6 +201,12 @@ button.qopt:hover{border-color:var(--ink)}
 .cmpme td{background:color-mix(in srgb,var(--hl) 14%,transparent)}.cmpimg{width:36px;height:36px;object-fit:cover;border-radius:6px;flex:none}
 .sniprow img{display:block;max-width:100%;height:auto;max-height:64px;border-radius:4px;border:1px solid var(--line);background:#fff}
 tr.sniprow td{padding:0 0 8px;border-top:0}
+.cmpbtn{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;text-align:left;border:2px solid var(--hl);border-radius:10px;padding:10px 12px;font-weight:700;background:none;color:var(--ink)}
+.cmpcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.cmpcard{display:flex;flex-direction:column;gap:8px;padding:12px}.cmphead{display:flex;gap:10px;align-items:center}
+.cmpgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.cmpcell{display:flex;flex-direction:column;gap:1px;background:color-mix(in srgb,var(--ink) 5%,transparent);border-radius:6px;padding:5px 6px;min-width:0}
+.cmpcell span{font-size:.7rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cmpcell b{font-size:.95rem}
+.cmpbetter{color:#3fb06b}.cmpworse{color:#e5534b}.cmpcard.cmpme{border:2px solid var(--hl)}
 .qtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;max-width:560px;width:100%;margin:8px auto 4px}
 .qtile{display:flex;flex-direction:column;align-items:center;gap:8px;background:none;border:0;padding:6px 0;font-weight:600;font-size:.9rem;color:var(--ink);min-height:auto}
 .qcirc{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;transition:transform .15s}.qtile:active .qcirc{transform:scale(.94)}
@@ -894,6 +900,7 @@ function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
  </div>
  <div class="stack">
   <div class="spread"><h2>Best claims</h2><button class="small" data-act="qMk" aria-expanded="${!!S.qMk}">${noMk?'Choose markets':esc(codes.map(c=>marketInfo(c).name).join(', '))} ▾</button></div>
+  <button class="cmpbtn" data-act="cmpOpen"><span aria-hidden="true">⇄</span> Compare with the market <span class="small muted">see what similar products claim</span></button>
   ${S.qMk||noMk?`<div class="panel stack"><span class="small muted">Check for these markets:</span>${marketPicker(p)}</div>`:''}
   ${noMk?`<div class="panel small muted">Choose at least one market to see claims.</div>`:`
   ${t.preview?`<div class="banner small"><b>Preview only.</b> Rules not yet verified by QA.</div>`:unver.length?`<div class="banner small">Rules pending for ${esc(unver.join(', '))}.</div>`:''}
@@ -901,7 +908,6 @@ function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
    :`<div class="panel"><b>${t.preview?'No claim would pass the draft rules.':'No nutrition claim qualifies.'}</b><p class="small muted" style="margin:4px 0 0">${open.length?'Fix the numbers marked in red first.':t.preview?'Rules for the selected markets are still pending.':'With these numbers, none of the checked nutrition claims qualify in the selected markets with verified rules.'}</p></div>`}
   ${otherCalloutsHtml(p,codes)}`}
   ${vAllergens(p)}
-  <button class="big" data-act="cmpOpen">Compare with similar products</button>
   <div class="row"><button class="primary big" data-act="qBreakdown" style="flex:1">See breakdown</button><button class="big" data-act="jobOpen" style="flex:1">${p.job?'Open job ':'Make packaging job'}${p.job?jobChip(p):''}</button></div>
   <p class="small muted disclaim" style="margin:0">${DISCLAIMER}</p>
  </div></div></div>`;}
@@ -1045,9 +1051,16 @@ function vCompare(){const p=P();if(!p?.extracted)return vQuick();const C=S.cmp||
  ${C.loading?'<div class="panel small">Searching…</div>':C.err?`<div class="banner warn small">${esc(C.err)}</div>`:''}
  ${C.items&&!C.items.length?'<div class="panel small muted">No similar products with nutrition data found. Try another category or search.</div>':''}
  ${items.length?`${ranks.length?`<div class="panel stack" style="gap:6px"><b>Where your product ranks (per 100 g)</b><span class="small muted">1st = lowest fat, saturated fat, sugars and sodium; highest fibre and protein.</span><div class="row small">${ranks.map(x=>`<span class="chip ${x.r.pos===1?'st-meets':x.r.pos<=Math.ceil(x.r.of/3)?'st-pending':'st-draft'}">${x.l}: ${x.r.pos===1?'best':ord(x.r.pos)} of ${x.r.of}</span>`).join('')}</div></div>`:''}
- <div class="panel" style="overflow-x:auto;padding:0"><table class="cmptab"><thead><tr><th>Product</th>${CMP_COLS.map(([k,l,u])=>`<th class="n">${l}<br><span class="muted">${u}/100 g</span></th>`).join('')}<th>Claimed on pack</th><th>Could claim (${esc(marketInfo(C.market).name)}, draft rules)</th></tr></thead><tbody>
- ${all.map(q=>`<tr class="${q===me?'cmpme':''}"><td><div class="row" style="gap:8px;flex-wrap:nowrap">${q.img?`<img src="${esc(q.img)}" alt="" class="cmpimg">`:''}<div><b>${esc(q.name)}</b>${q===me?' <span class="chip st-approved">Yours</span>':''}<div class="small muted">${esc(q.brand)}</div></div></div></td>${CMP_COLS.map(([k])=>`<td class="n mono">${val(q,k)==null?'—':esc(fmt(val(q,k)))}</td>`).join('')}<td class="small">${q===me?'<span class="muted">—</span>':(q.onPack||[]).length?esc(q.onPack.join(', ')):'<span class="muted">Not recorded</span>'}</td><td class="small">${esc(claimsFor(q,C.market).join(', ')||'—')}</td></tr>`).join('')}
- </tbody></table></div>`:''}
+ <div class="small muted">Per 100 g. Energy in kJ, sodium in mg, everything else in g. “Could claim” uses the draft ${esc(marketInfo(C.market).name)} rules.</div>
+ <div class="cmpcards">${all.map(q=>{const ours=claimsFor(q,C.market);return `<div class="panel cmpcard ${q===me?'cmpme':''}">
+  <div class="cmphead">${q.img?`<img src="${esc(q.img)}" alt="" class="cmpimg">`:''}<div style="min-width:0"><b>${esc(q.name)}</b>${q===me?' <span class="chip st-approved">Yours</span>':''}<div class="small muted">${esc(q.brand)}</div></div></div>
+  <div class="cmpgrid">${CMP_COLS.map(([k,l,u,dir])=>{const v=val(q,k),mv=val(me,k);
+   // Red: this product beats yours on this number. Green: yours is better or the same.
+   const cls=q!==me&&v!=null&&mv!=null&&dir!==0?((dir<0?v<mv-1e-9:v>mv+1e-9)?'cmpworse':'cmpbetter'):'';
+   return `<div class="cmpcell"><span>${l}</span><b class="mono ${cls}">${v==null?'—':esc(fmt(v))}</b></div>`;}).join('')}</div>
+  ${q===me?'':`<div class="small"><b>On pack:</b> ${(q.onPack||[]).length?esc(q.onPack.join(', ')):'<span class="muted">not recorded</span>'}</div>`}
+  <div class="small"><b>Could claim:</b> ${ours.length?esc(ours.join(', ')):'<span class="muted">none</span>'}</div></div>`;}).join('')}</div>
+ <div class="small muted"><span class="cmpbetter">Green</span>: yours is better or the same. <span class="cmpworse">Red</span>: theirs is better (lower fat, saturated fat, sugars or sodium; higher fibre or protein). Energy isn't coloured.</div>`:''}
  <p class="small muted disclaim" style="margin:0">${DISCLAIMER}</p></div>`;}
 document.addEventListener('change',e=>{const s=e.target.closest&&e.target.closest('[data-cmp]');if(!s||!S.cmp)return;S.cmp.market=s.value;render();});
 
