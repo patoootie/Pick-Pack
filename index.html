@@ -162,6 +162,7 @@ details.why[open]>summary{border:0;margin:0}
 details.why span{display:block;color:var(--muted);margin-top:2px}
 .cropwrap{position:relative;touch-action:none;user-select:none;-webkit-user-select:none;line-height:0;overflow:hidden;border-radius:8px}
 .cropwrap img{width:100%;display:block}
+.chk{display:flex;align-items:flex-start;gap:10px;cursor:pointer}.chk input{width:auto;flex:none;margin-top:2px}.chk span{flex:1;min-width:0}
 .impgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
 .imptab{width:100%;border-collapse:collapse;font-size:.9rem}.imptab th,.imptab td{text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);vertical-align:middle}.imptab select{width:100%;min-width:0}
 .imptab.sum td{vertical-align:top}
@@ -557,7 +558,7 @@ function nipRows(p){const x=p.extracted||{nutrients:{}},lab=per100Label(p);retur
   const mark=!open&&has&&p.extracted.servingSize?.value!=null?`<span class="okmark" title="${f?.status==='corrected'?'Corrected and checked':'Adds up'}">✓</span>`:'';
   const sub=open?`<tr class="flagrow"><td colspan="4"><div class="flagline"><span><b>${{blurry:'Can\'t double-check',missing:'Not found',conflict:'Doesn\'t add up'}[f.type]}:</b> ${esc(f.note)}</span><button class="mini" data-act="ack" data-k="${k}">${f.type==='missing'?'Not on the pack':'The pack says this'}</button></div></td></tr>`:'';
   const shown=c=>n[c]==null?'':(n.q?.[c]==='<'?'<':'')+n[c];const tip=c=>n.q?.[c]==='~0'?` title="Printed as 0 on a US panel, which means less than ${US_ZERO_BOUND[k]} ${NUT[k].unit}"`:n.q?.[c]==='<'?' title="Printed as less than this value"':'';
-  return `<tr class="${open?'flag-open':''}"><td>${label}${mark}${n.derived?'<span class="small muted"> · per 100 calculated</span>':''}</td><td class="n"><input id="n-${k}-ps" class="num" inputmode="decimal" data-f="nut" data-k="${k}" data-c="perServing" value="${esc(shown('perServing'))}"${tip('perServing')} placeholder="—" aria-label="${label} per serving"></td>
+  return `<tr class="${open?'flag-open':''}"><td>${label}${mark}</td><td class="n"><input id="n-${k}-ps" class="num" inputmode="decimal" data-f="nut" data-k="${k}" data-c="perServing" value="${esc(shown('perServing'))}"${tip('perServing')} placeholder="—" aria-label="${label} per serving"></td>
   <td class="n"><input id="n-${k}-p100" class="num${n.derived?' derived':''}" inputmode="decimal" data-f="nut" data-k="${k}" data-c="per100" value="${esc(shown('per100'))}"${tip('per100')} placeholder="—" aria-label="${label} ${lab}"></td>
   <td><select id="n-${k}-u" data-f="nut" data-k="${k}" data-c="unit" aria-label="${label} unit">${UNIT_OPTS[unit].map(u=>`<option ${n.unit===u?'selected':''}>${u}</option>`).join('')}</select></td></tr>${sub}`;}).join('');}
 function sReview(p){
@@ -787,8 +788,8 @@ function vAllergens(p){const x=p.extracted||{};
  if(!(x.ingredientsText||'').trim())return `<div class="panel stack"><h2>Allergens</h2><p class="small muted" style="margin:0">Add the ingredients (and any “Contains” or “May contain” statement) to check allergens.</p></div>`;
  const rows=allergenRows(p);const free=rows.filter(r=>r.st==='free').length;
  return `<div class="panel stack"><div class="spread"><h2>Allergens</h2><span class="small muted">${free} of ${rows.length} not listed</span></div>
- <div class="alg">${rows.map(r=>`<div class="algrow al-${r.st}"><div class="spread" style="gap:6px"><b>${esc(r.label)}</b><span class="chip al-chip-${r.st}">${r.st==='contains'?'Contains':r.st==='may'?'May contain':r.gfMeets?'Gluten free ✓':'Not listed'}</span></div><div class="small">${esc(r.note)}</div></div>`).join('')}</div>
- <p class="small muted" style="margin:0">“Not listed” means the allergen doesn't appear in the ingredients or allergen statements. It isn't proof it's absent (for example milk inside a flavouring), so any “free from” claim needs supplier evidence. Allergen statements are read from the photo; check them under Ingredients.</p></div>`;}
+ <div class="alg">${rows.map(r=>`<div class="algrow al-${r.st}"><div class="spread" style="gap:6px"><b>${esc(r.label)}</b><span class="chip al-chip-${r.st}" title="${esc(r.note)}">${r.st==='contains'?'Contains':r.st==='may'?'May contain':r.gfMeets?'Gluten free ✓':'Not listed'}</span></div></div>`).join('')}</div>
+ <p class="small muted" style="margin:0">“Not listed” isn't proof it's absent. “Free from” claims need supplier evidence.</p></div>`;}
 function marketPicker(p){const sel=new Set(p.markets||[]);return `<div class="mchips">${(S.markets?.list||[]).map(m=>`<button class="mchip" data-act="qmtog" data-code="${m.code}" aria-pressed="${sel.has(m.code)}" title="${esc(rsStatusText(m.code))}"><span class="dot ${rsDot(m.code)}"></span>${esc(m.name)}</button>`).join('')}</div>`;}
 function vQuick(){
  if(S.busy==='extract')return `<div class="panel stack" style="max-width:620px;margin:32px auto"><h1>Reading the pack…</h1><p class="muted" style="margin:0">${esc(S.ocrStep||'Starting…')}</p><div class="progress" style="height:10px;flex:none"><i style="width:0%"></i></div><p class="small muted" style="margin:0">Photos are read on this device. The first time takes a little longer.</p></div>`;
@@ -811,33 +812,31 @@ function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
  <div class="stack">
   <h2>Nutrition panel</h2>
   ${(p.extracted.warnings||[]).filter(w=>/^Photo check|tilted/.test(w)).map(w=>`<div class="banner warn small">${esc(w)}</div>`).join('')}
-  ${p.extracted.servingSize?.inferred?`<div class="banner small"><b>Serving size worked out from the panel:</b> ${esc(p.extracted.servingSize.value)} g (energy ${esc(p.extracted.servingSize.from)}). The photo's serving size line couldn't be read. Change it above if the pack says otherwise.</div>`:''}
+  ${p.extracted.servingSize?.inferred?`<div class="banner small">Serving size worked out from the panel. Change it if the pack says otherwise.</div>`:''}
   ${p.extracted.multiCol?`<div class="banner ${p.preparation?'small':'err small'}"><b>How is this food eaten?</b> This panel has separate columns (for example “dry mix” and “made as directed”). Claims must be based on the form the food is eaten in (Standard 1.2.7—7), so choose one. PackPick won't pick the column that happens to pass.
    <div class="row" style="margin-top:8px"><button class="small ${p.preparation==='asSold'?'primary':''}" data-act="prep" data-v="asSold">Eaten as sold</button><button class="small ${p.preparation==='prepared'?'primary':''}" data-act="prep" data-v="prepared">Prepared first (e.g. add milk or water)</button></div>
    ${p.preparation?`<div class="small" style="margin-top:6px">Using the <b>${p.preparation==='prepared'?'made as directed':'dry mix (as sold)'}</b> column${p.preparation==='prepared'?'. Claims will carry “when prepared according to directions” (QA to confirm the wording)':''}.</div>`:''}</div>`:''}
-  ${p.extracted.perServeOnly?`<div class="banner small"><b>US-style panel (per serving only).</b> PackPick worked out the per 100 g column from the ${esc(p.extracted.servingSize?.value??'?')} g serving. US panels round small amounts (under 0.5 g shows as 0 g), so confirm exact values from the product spec before using claims that depend on them.</div>`:''}
-  ${open.length?`<div class="banner err small"><b>${open.length} number${open.length>1?'s':''} ${open.length>1?'are':'is'} wrong or missing.</b> Fix ${open.length>1?'them':'it'} below (marked in red), or crop the photo to the table and read it again. Claims that use ${open.length>1?'them':'it'} are held back until then.<div class="row" style="margin-top:8px">${open.map(o=>`<button class="mini" data-act="focusRow" data-id="n-${o.k}-${p.extracted.nutrients[o.k]?.per100==null?'p100':'ps'}">Go to ${esc(o.label.replace('– ',''))}</button>`).join('')}${(()=>{const c=(p.captures||[]).find(x=>x.method!=='sample'&&x.method!=='text');return c?`<button class="small" data-act="crop" data-id="${c.id}">✂ Crop the photo</button>`:'';})()}</div></div>`:''}
-  ${(()=>{const c=(p.captures||[]).find(x=>x.method!=='text'&&capSrc(x));const tc=(p.captures||[]).find(x=>x.method==='text');return c||tc?`<details class="cmp" ${p.confirmed?'':'open'}><summary>Compare with the original</summary><div style="padding-bottom:10px">${c?`<img src="${esc(capSrc(c))}" alt="Original pack photo" style="border-radius:8px;border:1px solid var(--line)">`:`<div class="textcap">${esc(tc.text)}</div>`}</div></details>`:'';})()}
+  ${p.extracted.perServeOnly?`<div class="banner small">US panel: per 100 g is worked out from the serving size.</div>`:''}
+  ${open.length?`<div class="banner err small"><b>${open.length} number${open.length>1?'s':''} to fix</b> (in red).<div class="row" style="margin-top:8px">${open.map(o=>`<button class="mini" data-act="focusRow" data-id="n-${o.k}-${p.extracted.nutrients[o.k]?.per100==null?'p100':'ps'}">Go to ${esc(o.label.replace('– ',''))}</button>`).join('')}${(()=>{const c=(p.captures||[]).find(x=>x.method!=='sample'&&x.method!=='text');return c?`<button class="small" data-act="crop" data-id="${c.id}">✂ Crop the photo</button>`:'';})()}</div></div>`:''}
+  ${(()=>{const c=(p.captures||[]).find(x=>x.method!=='text'&&capSrc(x));const tc=(p.captures||[]).find(x=>x.method==='text');return c||tc?`<details class="cmp"><summary>Compare with the original</summary><div style="padding-bottom:10px">${c?`<img src="${esc(capSrc(c))}" alt="Original pack photo" style="border-radius:8px;border:1px solid var(--line)">`:`<div class="textcap">${esc(tc.text)}</div>`}</div></details>`:'';})()}
   ${nipPanel(p)}
-  ${!p.extracted.ingredientsText?`<div class="panel stack ingask" style="border:2px solid var(--hl)"><div><b>No ingredients in this photo.</b><div class="small muted">Claims like “Only 6 ingredients”, “No preservatives” and “Made with …” need them.</div></div>
+  ${!p.extracted.ingredientsText?`<div class="panel stack ingask" style="border:2px solid var(--hl)"><div><b>Add the ingredients</b> for more callouts.</div>
    ${S.busy==='ing'?`<span class="small">Reading the ingredients…</span>`:`<div class="row"><button class="primary small" data-act="ingCam">Take a photo of the ingredients</button><button class="small" data-act="ingUp">Upload a photo</button><button class="small" data-act="ingType">Type them</button></div>`}</div>`:''}
-  <details id="ingDetails" ${(p.extracted.ingredientsText&&!p.confirmed)||S.ingOpen?'open':''}><summary>Ingredients${p.extracted.ingredientsText?' · check the spelling':' (none found)'}</summary><label class="fld">Used for ingredient claims and “No added sugar”. Fix any misread words.<textarea id="x-ing" data-f="ing">${esc(p.extracted.ingredientsText||'')}</textarea></label>
-  <label class="fld">“Contains” statement (as printed)<input id="x-ct" data-f="ctext" value="${esc(p.extracted.containsText||'')}" placeholder="e.g. Contains soy"></label>
-  <label class="fld">“May contain” statement (as printed)<input id="x-mc" data-f="mtext" value="${esc(p.extracted.mayContainText||'')}" placeholder="e.g. May contain traces of sesame"></label>
-  <label class="row small"><input type="checkbox" id="gnd" data-f="gnd" style="width:auto" ${p.extracted.glutenNotDetected?'checked':''}> The panel says gluten: not detected</label>
-  <label class="row small"><input type="checkbox" id="mcg" data-f="mcg" style="width:auto" ${p.extracted.mayContainGluten?'checked':''}> The pack has a “may contain” warning for gluten, wheat, barley, rye or oats</label>
-  <label class="fld" style="padding-bottom:10px;max-width:260px">Whole grain per serving (g), if you know it<input id="wg" class="num" inputmode="decimal" data-f="wg" value="${esc(p.wholegrainPerServing??'')}" placeholder="${(()=>{const e=wgEstimate(p);return e?'≈ '+fmt(e.g)+' from pack %':'not known';})()}"></label></details>
+  <details id="ingDetails" ${S.ingOpen?'open':''}><summary>Ingredients and allergens</summary><label class="fld">Ingredients (fix any misread words)<textarea id="x-ing" data-f="ing">${esc(p.extracted.ingredientsText||'')}</textarea></label>
+  <label class="fld">“Contains”<input id="x-ct" data-f="ctext" value="${esc(p.extracted.containsText||'')}" placeholder="e.g. Contains soy"></label>
+  <label class="fld">“May contain”<input id="x-mc" data-f="mtext" value="${esc(p.extracted.mayContainText||'')}" placeholder="e.g. May contain sesame"></label>
+  <label class="chk small"><input type="checkbox" id="gnd" data-f="gnd" ${p.extracted.glutenNotDetected?'checked':''}><span>Panel says gluten: not detected</span></label>
+  <label class="chk small"><input type="checkbox" id="mcg" data-f="mcg" ${p.extracted.mayContainGluten?'checked':''}><span>“May contain” gluten, wheat, barley, rye or oats</span></label>
+  <label class="fld" style="padding-bottom:10px;max-width:260px">Whole grain per serving (g)<input id="wg" class="num" inputmode="decimal" data-f="wg" value="${esc(p.wholegrainPerServing??'')}" placeholder="${(()=>{const e=wgEstimate(p);return e?'≈ '+fmt(e.g)+' from pack %':'not known';})()}"></label></details>
   <details><summary>Photos (${(p.captures||[]).length}) · crop or add more</summary><div class="stack" style="padding-bottom:10px">${(p.captures||[]).map(c=>c.method==='text'?`<div class="textcap">${esc(c.text)}</div>`:`<div class="stack" style="gap:6px">${c.method!=='sample'?`<div><button class="small" data-act="crop" data-id="${c.id}">✂ Crop and read again</button></div>`:''}${capSrc(c)?`<img src="${esc(capSrc(c))}" alt="Pack photo" style="border-radius:8px;border:1px solid var(--line)">`:'<span class="small muted">Loading photo…</span>'}</div>`).join('')}<div class="row"><button class="small" data-act="qAddCam">Add another photo</button><button class="small" data-act="qAddUp">Add from device</button></div></div></details>
   <div class="panel stack confirmbox" id="confirmBox">${p.confirmed?`<div class="row">${chip('meets','Values confirmed against pack')}<span class="small muted">${esc(nameOf(p.confirmedBy))} · ${day(p.confirmedAt)}</span></div>`
-   :`${!open.length&&num(p.extracted.servingSize?.value)!=null?`<div class="row">${chip('meets','All numbers add up')}<span class="small muted">That's a maths check only.</span></div>`:''}
-   <div class="small">${open.length?'Fix the numbers marked in red, then compare':'Compare'} every number and unit with the pack photo. You need to confirm before copying a claim or downloading the QA summary.</div>
+   :`<div class="small">${open.length?'Fix the red numbers, then check':'Check'} every number against the pack. Needed before copying a claim.</div>
    <button class="primary big" data-act="qConfirm" ${open.length||num(p.extracted.servingSize?.value)==null?'disabled':''}>Confirm values against pack</button>`}</div>
  </div>
  <div class="stack">
   <div class="spread"><h2>Best claims</h2><button class="small" data-act="qMk" aria-expanded="${!!S.qMk}">${esc(codes.map(c=>marketInfo(c).name).join(', '))} ▾</button></div>
   ${S.qMk?`<div class="panel stack"><span class="small muted">Check for these markets:</span>${marketPicker(p)}</div>`:''}
-  <div class="statusline small">${t.ms.map(m=>`<span>${esc(m.name)}: ${m.verified?chip('meets',`Rules verified v${m.rs.version}`):chip('pending','Rules pending')}</span>`).join(' ')} <span>${p.confirmed?chip('meets','Values confirmed'):chip('needs','Values not confirmed')}</span></div>
-  ${t.preview?`<div class="banner small"><b>Preview only.</b> QA hasn't verified the rules for ${esc(unver.join(', '))} yet, so nothing below counts as passing and claims can't be copied. These are what the draft rules would allow.</div>`:unver.length?`<div class="banner small">${esc(unver.join(', '))}: rules pending. ${unver.length>1?'They aren\'t':'It isn\'t'} counted as passing.</div>`:''}
+  ${t.preview?`<div class="banner small"><b>Preview only.</b> Rules not yet verified by QA.</div>`:unver.length?`<div class="banner small">Rules pending for ${esc(unver.join(', '))}.</div>`:''}
   ${t.list.length?`<div class="panel qlist">${t.list.map((g,i)=>claimRow(p,t,g,i)).join('')}</div>`
    :`<div class="panel"><b>${t.preview?'No claim would pass the draft rules.':'No nutrition claim qualifies.'}</b><p class="small muted" style="margin:4px 0 0">${open.length?'Fix the numbers marked in red first.':t.preview?'Rules for the selected markets are still pending.':'With these numbers, none of the checked nutrition claims qualify in the selected markets with verified rules.'}</p></div>`}
   ${otherCalloutsHtml(p,codes)}
@@ -858,13 +857,11 @@ function claimRow(p,t,g,i){const verifiedMs=t.ms.filter(m=>m.verified);const r=g
  return `<div class="qclaim"><span class="qnum">${i+1}</span><div class="stack" style="gap:4px;flex:1">
   <div class="row"><span class="w"><b>${esc(r.wording)}</b></span>${copyBtn2(p,r,m)}</div>
   <div class="row">${apOk?chip('approved','QA approved'):chip(st,t.preview?'Preview · rules pending':STLABEL[r.status==='panel'?'panel':st])}${t.ms.length>1?`<span class="small"><b>${g.passM.length} of ${t.ms.length} markets</b> (${esc(g.passM.map(c=>marketInfo(c).name).join(', '))})</span>`:''}</div>
-  <span class="small">${esc(whyText(r,p))}</span>
+  <span class="small muted">${esc(whyText(r,p).split(/(?<=\.)\s/)[0])}</span>
   ${r.required.length?`<span class="small"><b>Must appear with:</b> ${esc(r.required.join(' '))}</span>`:''}
-  ${r.panelChanges?.length?`<span class="small panelreq"><b>Nutrition panel change needed:</b> ${esc(r.panelChanges.join(' '))}</span>`:''}
-  ${excepts.length?`<span class="small muted">Exceptions: ${esc(excepts.join('; '))}</span>`:''}
-  <span class="small muted">${esc(r.rule.source||'')}${r.rule.clause?' · '+esc(r.rule.clause):''} · rules v${esc(m?.rs?.version??'?')}</span></div></div>`;}
+  ${r.panelChanges?.length?`<span class="small panelreq"><b>Panel change needed:</b> ${esc(r.panelChanges.join(' '))}</span>`:''}</div></div>`;}
 function otherCalloutsHtml(p,codes){const rows=otherCallouts(p,codes);if(!rows.length)return '';
- return `<div class="panel stack"><div><h2>Other callouts</h2><div class="small muted">Ingredient-based, not ranked with nutrition claims. Check with the supplier before using any of these.</div></div>
+ return `<div class="panel stack"><div><h2>Other callouts</h2><div class="small muted">Check with the supplier first.</div></div>
  ${rows.map(({g,r})=>`<div class="ocrow"><div class="spread"><b>${esc(g.wording)}</b>${r.status==='meets'?chip('needs','Check with supplier'):chip('needs','Needs evidence')}</div><div class="small">${esc(r.status==='meets'?(r.checks.filter(c=>c.result==='pass').map(c=>c.detail).filter(Boolean)[0]||''):(r.reasons[0]||''))}</div></div>`).join('')}</div>`;}
 function vBreakdown(){const p=P();if(!p||!p.extracted)return vQuick();
  return `<div class="stack"><div class="spread"><button class="ghost" data-act="nav" data-v="result">← Back to results</button>${p.sample?'<span class="chip sample">SAMPLE DATA</span>':''}</div>
@@ -1129,7 +1126,7 @@ function columnLines(tableLines,numLines,imgW){
  return out;}
 function cleanNums(s){return String(s).replace(/(\d)\s*¢/g,'$1g').replace(/(\d)\s*k[)\]}|lI1J]/g,'$1kJ').replace(/(\d)\s*[,·]\s*(\d)/g,'$1.$2').replace(/(\d)[oO]/g,(m,a)=>a+'0').replace(/[oO](\d)/g,(m,a)=>'0'+a).replace(/(\d)[lI|]/g,(m,a)=>a+'1').replace(/[lI|](\d)/g,(m,a)=>'1'+a);}
 // Row names, tolerant of the reader mixing up O/0 and I/l/1.
-const NUT_MATCH=[['fat_saturated_g',/s[a@]tur[a@]t/i],['fat_trans_g',/\btr[a@]ns\b/i],['sugars_g',/sug[a@]r/i],['dietary_fibre_g',/f[i1l|]b(re|er)/i],['energy_kj',/en[e3]rgy|kilojoule|calories(?!\s*a\s*day)/i],['protein_g',/pr[o0]te[i1l|]n|\bp[r]?[o0]te?[i1l|]?n\b/i],['carbohydrate_g',/c[a@]rb[o0]/i],['sodium_mg',/s[o0][d0ob](?:[i1l|]u|[i1l|]|u)m(?!\s*bicarb)/i],['potassium_mg',/p[o0]t[a@]ss[i1l]um/i],['salt_g',/^\W{0,3}s[a@][l1i]t\b(?!\s*,)/i],['fat_total_g',/\bf[a@]t(?![a-z])/i]];
+const NUT_MATCH=[['fat_saturated_g',/s[a@]tur[a@]t/i],['fat_trans_g',/\btr[a@]ns(?![a-eg-z])/i],['sugars_g',/sug[a@]r/i],['dietary_fibre_g',/f[i1l|]b(re|er)/i],['energy_kj',/en[e3]rgy|kilojoule|calories(?!\s*a\s*day)/i],['protein_g',/pr[o0]te[i1l|]n|\bp[r]?[o0]te?[i1l|]?n\b/i],['carbohydrate_g',/c[a@]rb[o0]/i],['sodium_mg',/s[o0][d0ob](?:[i1l|]u|[i1l|]|u)m(?!\s*bicarb)/i],['potassium_mg',/p[o0]t[a@]ss[i1l]um/i],['salt_g',/^\W{0,3}s[a@][l1i]t\b(?!\s*,)/i],['fat_total_g',/\bf[a@]t(?![a-z])/i]];
 // Alternative readings of one number: the trailing "g" misread as 9 or 4, or a lost decimal point.
 function numCands(t){const s=/^0\d+$/.test(t.s)?'0.'+t.s.slice(1):t.s,out=[{v:t.v,c:0}];const dot=s.indexOf('.');
  if(dot>=0&&s.length-dot-1>=2&&/[94]$/.test(s))out.push({v:+s.slice(0,-1),c:1,strong:true});
@@ -1179,7 +1176,7 @@ function parseNip(lines,forcedSs){
  const perServeOnly=/nutrition\s*facts|amount\s*per\s*serving|daily\s*value/i.test(all)&&!/per\s*100|\/\s*100\s*g/i.test(all);out.perServeOnly=perServeOnly;
  for(const l of lines){const raw=String(l.text);
   const hit=NUT_MATCH.find(([k,re])=>re.test(raw));if(!hit)continue;const k=hit[0];
-  const lm=raw.match(hit[1]);const rest=raw.slice(lm.index+lm[0].length).replace(/^[a-z ,:.\-–]*?(?=[\d\s(<]|$)/i,'');
+  const lm=raw.match(hit[1]);const rest=raw.slice(lm.index+lm[0].length).replace(/^\s*[iIl|]\s?g\b/,' 1g').replace(/^[a-z ,:.\-–]*?(?=[\d\s(<]|$)/i,'');
   const mn=/(^|\s)[MN]\d\s*[g¢]/.test(rest);const t=cleanNums(rest.replace(/(^|\s)[MN](\d)(\s*[g¢])/g,'$111.$2$3'));
   if(out.nutrients[k]&&(out.nutrients[k].per100!=null||out.nutrients[k].perServing!=null))continue;
   let lostDot=false;
@@ -1219,7 +1216,7 @@ function parseNip(lines,forcedSs){
  return out;}
 function parseIngredients(text){const t=String(text).replace(/\r/g,'');const m=t.match(/ingredients?\s*[:\-.]?\s*([\s\S]*)/i);let s=m?m[1]:t;
  s=s.replace(/\n\s*\n/g,'\n').split(/\b(?:contains|allergens?|may contain|may be present|manufactured|nutrition\s+(?:information|facts)|\d*\s*servings?\s+per|serving\s+size|ave\.?\s+quantity|average\s+quantity|amount\s+per|store\s+in|best\s+before|made\s+in|packed\s+in|product\s+of)\b/i)[0];
- const end=s.search(/\.\s*(\n|$)/);if(end>0)s=s.slice(0,end);return s.replace(/\s*\n\s*/g,' ').replace(/\s+/g,' ').trim().replace(/[\s\/|.,;:_\-]+$/,'');}
+ const end=s.search(/\.\s*(\n|$)/);if(end>0)s=s.slice(0,end);return s.replace(/\s*\|\s*/g,' ').replace(/\s*\n\s*/g,' ').replace(/\s+/g,' ').trim().replace(/[\s\/|.,;:_\-]+$/,'');}
 async function extract(){const p=P();S.err='';const caps=p.captures||[];
  if(caps.length&&caps.every(c=>c.method==='sample')){applyExtraction(p,clone(SAMPLE_EXTRACTION));return;}
  S.busy='extract';S.ocrStep='Starting the photo reader…';render();
@@ -1231,7 +1228,8 @@ async function extract(){const p=P();S.err='';const caps=p.captures||[];
     const cl=columnLines(r.tableLines,r.numLines,r.imgW);if(cl){colLines.push(...cl.map(x=>({text:x.text,conf:x.conf,cols:x.cols})));altLines.push(...cl.filter(x=>x.altCols).map(x=>({text:x.text,conf:x.conf,cols:x.altCols})));}
     {const qt=qualityText(c.quality);if(qt.length)warnings.push('Photo check: '+qt.join(' ')+' Compare every number with the pack.');}
     if(r.straightened)warnings.push(`The photo was tilted about ${Math.abs(r.straightened).toFixed(1)}°, so PackPick straightened it before reading.`);}
-   const ingSrc=/ingredient/i.test(r.text)?r.text:r.tableText;if(c.kind==='ingredients'||(c.kind==='any'&&/ingredient/i.test(ingSrc)))ingTexts.push(ingSrc);}
+   // Use whichever read kept more of the ingredient list together (most commas).
+   const ingSrc=[r.text,r.tableText].filter(t=>/ingredient/i.test(t)).sort((a,b)=>(parseIngredients(b).match(/,/g)||[]).length-(parseIngredients(a).match(/,/g)||[]).length)[0]||r.text;if(c.kind==='ingredients'||(c.kind==='any'&&/ingredient/i.test(ingSrc)))ingTexts.push(ingSrc);}
   for(const c of texts){transcript.push(`[Pasted ${c.kind==='nip'?'NIP':'ingredients'} text]\n`+c.text);if(c.kind!=='ingredients')nipLines.push(...c.text.split(/\n/).map(t=>({text:t,conf:null})));if(c.kind==='ingredients'||(c.kind==='any'&&/ingredient/i.test(c.text)))ingTexts.push(c.text);}
   if(caps.some(c=>c.method!=='text'&&c.method!=='sample'&&!imgs.find(x=>x.c.id===c.id)))warnings.push('Some photos are no longer stored on this device, so they were not read.');
   if(!nipLines.length&&!ingTexts.length)throw {message:'Nothing to read yet. Add a photo or paste the text first.'};
