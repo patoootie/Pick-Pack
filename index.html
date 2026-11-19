@@ -689,6 +689,7 @@ function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
  <div class="stack">
   <h2>Nutrition panel</h2>
   ${p.extracted.servingSize?.inferred?`<div class="banner small"><b>Serving size worked out from the panel:</b> ${esc(p.extracted.servingSize.value)} g (energy ${esc(p.extracted.servingSize.from)}). The photo's serving size line couldn't be read. Change it above if the pack says otherwise.</div>`:''}
+  ${p.extracted.multiCol?`<div class="banner small"><b>This panel has extra columns</b> (for example “dry mix” and “made as directed”). PackPick used the per-serve and per-100 g columns that match the ${esc(p.extracted.servingSize?.value??'?')} g serving. QA to confirm which basis the claims should use (as sold or as prepared).</div>`:''}
   ${p.extracted.perServeOnly?`<div class="banner small"><b>US-style panel (per serving only).</b> PackPick worked out the per 100 g column from the ${esc(p.extracted.servingSize?.value??'?')} g serving. US panels round small amounts (under 0.5 g shows as 0 g), so confirm exact values from the product spec before using claims that depend on them.</div>`:''}
   ${open.length?`<div class="banner err small"><b>${open.length} number${open.length>1?'s':''} ${open.length>1?'are':'is'} wrong or missing.</b> Fix ${open.length>1?'them':'it'} below (marked in red), or crop the photo to the table and read it again. Claims that use ${open.length>1?'them':'it'} are held back until then.<div class="row" style="margin-top:8px">${(()=>{const c=(p.captures||[]).find(x=>x.method!=='sample'&&x.method!=='text');return c?`<button class="small" data-act="crop" data-id="${c.id}">✂ Crop the photo</button>`:'';})()}</div></div>`:''}
   ${nipPanel(p)}
@@ -814,9 +815,19 @@ function pickPair(A,B,ss){let best=null;
 function rowScore(n,ss){if(!n)return 9;if(n.perServing==null&&n.per100==null)return 8;if(n.perServing==null||n.per100==null)return 6;
  let s=n.flag?(n.flag.type==='blurry'?1:4):0;if(ss&&n.unit!=='kJ'){const e=n.per100*ss/100,tol=Math.max(e*.2,n.unit==='mg'?5:.15);if(Math.abs(n.perServing-e)>tol)s+=5;}return s;}
 function mergeNip(a,b){if(!b)return a;const out={...a,nutrients:{}};
- if((a.servingSize.value==null||a.servingSize.inferred)&&b.servingSize.value!=null&&!(b.servingSize.inferred&&a.servingSize.value!=null))out.servingSize=b.servingSize;if(!a.servingsPerPack&&b.servingsPerPack)out.servingsPerPack=b.servingsPerPack;out.liquid=a.liquid||b.liquid;out.perServeOnly=a.perServeOnly||b.perServeOnly;
+ if((a.servingSize.value==null||a.servingSize.inferred)&&b.servingSize.value!=null&&!(b.servingSize.inferred&&a.servingSize.value!=null))out.servingSize=b.servingSize;if(!a.servingsPerPack&&b.servingsPerPack)out.servingsPerPack=b.servingsPerPack;out.liquid=a.liquid||b.liquid;out.perServeOnly=a.perServeOnly||b.perServeOnly;out.multiCol=a.multiCol||b.multiCol;
  const ss=out.servingSize.value;for(const {k} of NUTS){const x=a.nutrients[k],y=b.nutrients[k];const sx=rowScore(x,ss),sy=rowScore(y,ss);const pick=sy<sx?y:x;if(pick)out.nutrients[k]=pick;}
  return out;}
+// Energy check: protein, fat and carbohydrate can't hold more energy than the whole food. A row that breaks this
+// usually lost a decimal point in both columns; shift it only if that makes the panel add up.
+function energyBalanceFix(nip){const ns=nip.nutrients;const en=ns.energy_kj;if(!en||en.per100==null)return;const E=toCanon('energy_kj',en.per100,en.unit);if(!E)return;
+ const g=k=>{const n=ns[k];return n&&n.per100!=null?toCanon(k,n.per100,n.unit):0;};
+ const calc=()=>17*g('protein_g')+37*g('fat_total_g')+17*g('carbohydrate_g')+8*g('dietary_fibre_g');const ok=()=>calc()<=E*1.15+40;
+ if(ok())return;
+ for(const k of ['protein_g','carbohydrate_g','fat_total_g','dietary_fibre_g']){const n=ns[k];if(!n||n.per100==null||n.per100<10)continue;const o={ps:n.perServing,p:n.per100};
+  n.per100=+fmt(n.per100/10,2);if(n.perServing!=null&&n.perServing>=1)n.perServing=+fmt(n.perServing/10,2);
+  if(ok()){n.flag={type:'blurry',status:'open',note:`Read as ${o.ps??'—'} / ${o.p}, which would be more energy than the whole food has (${fmt(E,0)} kJ per 100 g). A decimal point was probably missed, so PackPick used ${n.perServing??'—'} / ${n.per100}.`};return;}
+  n.perServing=o.ps;n.per100=o.p;}}
 // Serving size from the panel itself: per-serving ÷ per-100 g for energy, checked against sodium.
 function inferServing(ns){const r=k=>{const n=ns[k];if(!n||n.perServing==null||!n.per100)return null;return n.perServing/n.per100*100;};
  const e=r('energy_kj'),s=r('sodium_mg');if(e==null)return null;if(e<2||e>500)return null;if(s!=null&&Math.abs(s-e)/e>.06)return null;
@@ -825,7 +836,7 @@ function parseNip(lines,forcedSs){
  const out={nutrients:{},servingSize:forcedSs||{value:null,unit:'g'},servingsPerPack:'',liquid:false};
  const all=cleanNums(lines.map(l=>l.text).join('\n')).replace(/\b(\d) (\d)(?=\s*servings?)/gi,'$1$2');
  const ss=forcedSs?null:(all.match(/serving\s*size[^\d\n]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/per\s*serv(?:ing|e)[\s:(]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/serv(?:ing|e)\s*[:(]?\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/(\d+(?:\.\d+)?)\s*(g|ml)\s*\/\s*[\d.]+\s*(?:oz|fl)/i));if(ss)out.servingSize={value:+ss[1],unit:/ml/i.test(ss[2])?'mL':'g'};
- const sp=all.match(/((?:about\s*|approx\.?\s*)?\d+(?:\.\d+)?)\s*servings?\s*per\s*(?:package|pack|container)/i)||all.match(/servings?\s*per\s*(?:package|pack|container)[^\d\n]*((?:approx\.?\s*)?\d+(?:\.\d+)?)/i);if(sp)out.servingsPerPack=sp[1];
+ const sp=all.match(/((?:about\s*|approx\.?\s*)?\d+(?:\.\d+)?)\s*servings?\s*per\s*(?:package|pack|container)/i)||all.match(/servings?\s*per\s*(?:package|pack|container)[^\d]{0,60}?((?:approx\.?\s*)?\d+(?:\.\d+)?)/i);if(sp)out.servingsPerPack=sp[1];
  if(/per\s*100\s*ml/i.test(all))out.liquid=true;
  // US-style "Nutrition Facts" panels give amounts per serving only.
  const perServeOnly=/nutrition\s*facts|amount\s*per\s*serving|daily\s*value/i.test(all)&&!/per\s*100|\/\s*100\s*g/i.test(all);out.perServeOnly=perServeOnly;
@@ -841,7 +852,12 @@ function parseNip(lines,forcedSs){
   const unit=k==='energy_kj'?(toks[0]&&(toks[0].u==='kcal'||toks[0].u==='cal'||(!toks[0].u&&/calor/i.test(lm[0])))?'kcal':'kJ'):k==='sodium_mg'?(toks.some(x=>x.u==='g')&&!toks.some(x=>x.u==='mg')?'g':'mg'):(toks.some(x=>x.u==='mg')&&!toks.some(x=>x.u==='g')?'mg':'g');
   const n={unit,perServing:null,per100:null,flag:null,labelSeen:true};
   if(perServeOnly&&toks.length){const ssz=out.servingSize.value;n.perServing=toks[0].v;n.per100=ssz?+fmt(toks[0].v*100/ssz,2):null;n.derived=true;}
-  else if(toks.length>=2){n.perServing=toks[0].v;n.per100=toks[1].v;
+  else if(toks.length>=2){
+   // Panels with extra columns (e.g. dry mix + made as directed): keep the two columns that match the serving size.
+   if(toks.length>=3&&out.servingSize.value){const ssz=out.servingSize.value;const fits=(a,b)=>{if(unit==='g'&&k!=='energy_kj'){const pk=pickPair(a,b,ssz);return pk&&pk.fit?(pk.changed?1:2):0;}const e=b.v*ssz/100;return b.v>0&&Math.abs(a.v-e)<=Math.max(e*.15,5)?2:0;};
+    let best=null;for(const [i,j] of [[1,2],[0,1],[0,2],[2,3],[1,3]]){if(!toks[i]||!toks[j])continue;const f=fits(toks[i],toks[j]);if(f&&(!best||f>best.f))best={i,j,f};if(f===2)break;}
+    if(best){toks=[toks[best.i],toks[best.j]];out.multiCol=true;}}
+   n.perServing=toks[0].v;n.per100=toks[1].v;
    const ssz=out.servingSize.value;
    if(ssz&&unit==='g'&&k!=='energy_kj'){const pk=pickPair(toks[0],toks[1],ssz);
     if(pk&&pk.changed&&pk.fit){n.perServing=pk.a;n.per100=pk.b;n.flag={type:'blurry',note:`Read as ${toks[0].s} / ${toks[1].s}. On photos the letter "g" often reads as a 9 or 4, and decimal points get lost, so PackPick suggests ${fmt(pk.a)} / ${fmt(pk.b)}, which matches the serving size. Check against the pack.`,status:'open'};}
@@ -869,11 +885,15 @@ async function extract(){const p=P();S.err='';const caps=p.captures||[];
   for(const c of texts){transcript.push(`[Pasted ${c.kind==='nip'?'NIP':'ingredients'} text]\n`+c.text);if(c.kind!=='ingredients')nipLines.push(...c.text.split(/\n/).map(t=>({text:t,conf:null})));if(c.kind==='ingredients'||(c.kind==='any'&&/ingredient/i.test(c.text)))ingTexts.push(c.text);}
   if(caps.some(c=>c.method!=='text'&&c.method!=='sample'&&!imgs.find(x=>x.c.id===c.id)))warnings.push('Some photos are no longer stored on this device, so they were not read.');
   if(!nipLines.length&&!ingTexts.length)throw {message:'Nothing to read yet. Add a photo or paste the text first.'};
-  const nip=mergeNip(parseNip(nipLines),tableLines.length?parseNip(tableLines):null);
+  // Read both ways, then redo any reading that missed the serving size using the one that found it.
+  let A=parseNip(nipLines),B=tableLines.length?parseNip(tableLines):null;
+  const pickSs=[A.servingSize,B?.servingSize].find(s=>s&&s.value!=null&&!s.inferred)||[A.servingSize,B?.servingSize].find(s=>s&&s.value!=null);
+  if(pickSs){if(A.servingSize.value!==pickSs.value)A=parseNip(nipLines,{...pickSs});if(B&&B.servingSize.value!==pickSs.value)B=parseNip(tableLines,{...pickSs});}
+  const nip=mergeNip(A,B);energyBalanceFix(nip);
   const x={source:`On-device reading of ${imgs.length} photo${imgs.length===1?'':'s'}${texts.length?' and pasted text':''}, ${day(now())}`,servingSize:nip.servingSize,servingsPerPack:nip.servingsPerPack,nutrients:{},ingredientsText:ingTexts.map(parseIngredients).filter(Boolean).join(', '),warnings,transcript:transcript.join('\n\n')};
   for(const {k,unit} of NUTS)x.nutrients[k]=nip.nutrients[k]||{unit,perServing:null,per100:null,flag:{type:'missing',note:'Not found in the photo or text.',status:'open'}};
   if(nip.liquid)p.physical='liquid';
-  if(nip.perServeOnly)x.perServeOnly=true;
+  if(nip.perServeOnly)x.perServeOnly=true;if(nip.multiCol)x.multiCol=true;
   const prev=p.extracted;if(prev){if(!x.ingredientsText&&prev.ingredientsText)x.ingredientsText=prev.ingredientsText;if(x.servingSize.value==null&&prev.servingSize?.value!=null)x.servingSize=prev.servingSize;if(!x.servingsPerPack&&prev.servingsPerPack)x.servingsPerPack=prev.servingsPerPack;}
   warnings.push('Photo reading is automatic and can misread small print. Check every value against the pack.');
   applyExtraction(p,x);
