@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PackPick</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PackPick">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky tool bar, single working column on phones; review splits into source | fields on desktop */
+:root{
+  --bg:#ffffff; --surface:#ffffff; --surface-2:#f3f3f3; --ink:#0a0a0a; --muted:#5e5e5e; --line:#dcdcdc;
+  --accent:#0a0a0a; --accent-ink:#ffffff; --accent-soft:#e6ff3d; --hl:#e6ff3d; --hl-ink:#0a0a0a;
+  --meets:#16703a; --meets-bg:#e1f2e6; --fails:#a8261c; --fails-bg:#f9e3e0;
+  --needs:#8a5300; --needs-bg:#fbeed6; --pending:#4d5873; --pending-bg:#e6e9f1;
+  --sample:#ffe45c; --sample-ink:#3a3000;
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0a0a0a; --surface:#121212; --surface-2:#1e1e1e; --ink:#f5f5f5; --muted:#a6a6a6; --line:#2f2f2f;
+  --accent:#f5f5f5; --accent-ink:#0a0a0a; --accent-soft:#e6ff3d; --hl:#e6ff3d; --hl-ink:#0a0a0a;
+  --meets:#6fd28f; --meets-bg:#183424; --fails:#ff8f84; --fails-bg:#3d1c19; --needs:#f2b85b; --needs-bg:#3a2b12;
+  --pending:#a9b5d6; --pending-bg:#262c3d; --sample:#e8cf45; --sample-ink:#2a2300; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a0a0a; --surface:#121212; --surface-2:#1e1e1e; --ink:#f5f5f5; --muted:#a6a6a6; --line:#2f2f2f;
+  --accent:#f5f5f5; --accent-ink:#0a0a0a; --accent-soft:#e6ff3d; --hl:#e6ff3d; --hl-ink:#0a0a0a;
+  --meets:#6fd28f; --meets-bg:#183424; --fails:#ff8f84; --fails-bg:#3d1c19; --needs:#f2b85b; --needs-bg:#3a2b12;
+  --pending:#a9b5d6; --pending-bg:#262c3d; --sample:#e8cf45; --sample-ink:#2a2300; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}img{max-width:100%}html{-webkit-text-size-adjust:100%}
+:root{padding-bottom:env(safe-area-inset-bottom,0px)}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:1.5rem;font-weight:800;overflow-wrap:anywhere}h2{font-size:1.2rem;font-weight:700}h3{font-size:1rem;font-weight:700}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar .wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-block:10px}
+.brand{display:flex;align-items:center;gap:8px;font-family:var(--f-display);font-weight:800;font-size:1.15rem;letter-spacing:-.01em}
+.brand .mark{width:26px;height:26px;border-radius:6px;background:var(--hl);color:var(--hl-ink);display:grid;place-items:center;font-size:.8rem}
+nav.tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+nav.tabs button{background:none;border:0;color:var(--muted);font:600 .9rem var(--f-body);padding:6px 10px;border-radius:8px;cursor:pointer}
+nav.tabs button[aria-current="page"]{background:var(--hl);color:var(--hl-ink)}
+main{padding-block:18px 40px}
+.stack{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.spread{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.muted{color:var(--muted)}.small{font-size:.85rem}.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.label{font-size:.72rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+button,.btn{font:600 .9rem var(--f-body);border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;min-height:38px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.ghost{border-color:transparent;background:transparent}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label.fld{display:flex;flex-direction:column;gap:4px;font-size:.82rem;color:var(--muted);font-weight:500;min-width:0}
+input,select,textarea{font:15px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+textarea{min-height:90px;resize:vertical}
+input.num{font-family:var(--f-mono);text-align:right}
+.grid2{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:640px){.grid2{grid-template-columns:1fr 1fr}.grid3{grid-template-columns:1fr 1fr 1fr}}
+.grid3{display:grid;grid-template-columns:1fr;gap:12px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:.75rem;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid transparent}
+.st-meets{background:var(--meets-bg);color:var(--meets)}.st-fails{background:var(--fails-bg);color:var(--fails)}
+.st-needs{background:var(--needs-bg);color:var(--needs)}.st-pending{background:var(--pending-bg);color:var(--pending)}
+.st-draft{background:var(--surface-2);color:var(--muted);border-color:var(--line)}
+.sample{background:var(--ink);color:var(--bg);font-weight:700;letter-spacing:.04em}
+.banner{border-radius:var(--r);padding:12px 14px;border:1px solid var(--line);background:var(--surface-2)}
+.banner.sample-b{background:var(--surface);color:var(--ink);border:2px dashed var(--ink)}
+.banner.warn{background:var(--needs-bg);color:var(--ink);border-color:transparent}
+.steps{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.steps button{flex:none;border-radius:999px;font-size:.82rem;min-height:34px}
+.steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.steps .done::before{content:"✓";color:var(--meets)}
+.steps button[aria-current="step"].done::before{color:var(--bg)}
+.plist{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:760px){.plist{grid-template-columns:1fr 1fr}}
+.pcard{display:flex;flex-direction:column;align-items:stretch;gap:8px;text-align:left;cursor:pointer;width:100%;font-weight:400}
+.capzones{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:760px){.capzones{grid-template-columns:1fr 1fr}}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap}
+.thumb{position:relative;width:96px;height:96px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb .x{position:absolute;top:2px;right:2px;min-height:0;padding:0 6px;font-size:.8rem}
+.thumb .tag{position:absolute;left:0;bottom:0;right:0;font-size:.65rem;background:rgba(0,0,0,.6);color:#fff;padding:1px 4px}
+.textcap{font-family:var(--f-mono);font-size:.8rem;white-space:pre-wrap;background:var(--surface-2);border-radius:8px;padding:8px;max-height:160px;overflow:auto}
+.review{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.review>*,.stack>*{min-width:0}
+.nip td input{width:5.2em}.nip select{width:auto;padding:8px 4px}
+@media(min-width:900px){.review{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr)}.review .src{position:sticky;top:76px;align-self:start;max-height:calc(100vh - 96px);overflow:auto}}
+.src img{width:100%;border-radius:8px;border:1px solid var(--line);background:#fff}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.n,th.n{text-align:right}
+tr.flag-open td{background:var(--needs-bg)}
+.nip td input{width:6.5em}
+.flagline{font-size:.8rem;margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.mchips{display:flex;flex-wrap:wrap;gap:8px}
+.mchip{border-radius:999px;padding:6px 12px;min-height:36px;font-weight:500}
+.mchip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--pending)}
+.dot.v{background:var(--meets)}.dot.d{background:var(--needs)}
+.hero{border:2px solid var(--ink);background:var(--surface)}
+.hero.best{border-style:dashed}
+.wording{font-family:var(--f-display);font-weight:800;font-size:1.45rem;letter-spacing:-.01em;background:var(--hl);color:var(--hl-ink);padding:0 6px;border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.claim .w b{background:var(--hl);color:var(--hl-ink);padding:0 5px;border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.claim{display:grid;grid-template-columns:1fr;gap:10px;padding:14px 0;border-top:1px solid var(--line)}
+.claim:first-of-type{border-top:0}
+@media(min-width:760px){.claim{grid-template-columns:minmax(0,.9fr) minmax(0,1.3fr)}}
+.claim .w{font-family:var(--f-display);font-weight:800;font-size:1.15rem}
+.rank{font-family:var(--f-mono);color:var(--muted);font-size:.8rem}
+details{border:1px solid var(--line);border-radius:8px;padding:0 10px;background:var(--surface)}
+details>summary{cursor:pointer;padding:8px 0;font-weight:600;font-size:.9rem}
+details[open]>summary{border-bottom:1px solid var(--line);margin-bottom:8px}
+.calc{font-family:var(--f-mono);font-size:.8rem;background:var(--surface-2);border-radius:6px;padding:6px 8px;overflow-x:auto;white-space:pre-wrap}
+.cov{display:grid;grid-template-columns:1fr;gap:8px}
+@media(min-width:640px){.cov{grid-template-columns:repeat(3,1fr)}}
+.ai{border-left:3px solid var(--accent);padding-left:10px;white-space:pre-wrap}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:8px;font-weight:500;z-index:20;max-width:calc(100% - 32px)}
+footer{border-top:1px solid var(--line);padding-block:14px 28px;font-size:.8rem;color:var(--muted)}
+.mrow{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.mrow .nm{flex:1 1 160px;min-width:0}
+.order{font-family:var(--f-mono);width:2em;color:var(--muted)}
+.rule{border-top:1px solid var(--line);padding:10px 0}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+.progress{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;flex:1 1 120px}
+.progress>i{display:block;height:100%;background:var(--ink)}
+.who{font-size:.8rem}
+.morebtn{display:none}
+@media(max-width:760px){nav.tabs .sec{display:none}nav.tabs.open .sec{display:inline-flex}.morebtn{display:inline-flex}nav.tabs{margin-left:0;width:100%}}
+.nipcard .grid2{grid-template-columns:1fr 1fr}
+.nipcard .nip td,.nipcard .nip th{padding:5px 4px}
+.nipcard .nip td input{width:4.6em;padding:6px}
+.nipcard .nip select{font-size:.8rem;padding:6px 2px}
+.nipcard .nip td:first-child{min-width:0;width:40%}
+.qopts{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:720px){.qopts{grid-template-columns:repeat(3,1fr)}}
+.qopt{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;min-height:120px;font-weight:400;padding:18px;border-radius:var(--r)}
+.qopt b{font-family:var(--f-display);font-size:1.15rem;font-weight:800}
+button.qopt:hover{border-color:var(--ink)}
+.qicon{width:34px;height:34px;border-radius:8px;background:var(--hl);color:var(--hl-ink);display:grid;place-items:center;font-size:1.1rem}
+.pastebox{width:100%;border:2px dashed var(--line);border-radius:8px;padding:14px;min-height:56px;color:var(--ink);cursor:text}
+.pastebox:empty::before{content:attr(data-ph);color:var(--muted)}
+.pastebox:focus{border-color:var(--ink);outline:none}
+.qres{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
+@media(min-width:900px){.qres{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.nipcard{border:2px solid var(--ink);border-radius:6px;padding:12px;background:var(--surface);display:flex;flex-direction:column;gap:10px}
+.niphead{font-family:var(--f-display);font-weight:800;font-size:1.1rem;letter-spacing:.02em;border-bottom:5px solid var(--ink);padding-bottom:6px}
+.qclaim{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}
+.qclaim:first-child{border-top:0;padding-top:0}
+.qclaim .w{font-family:var(--f-display);font-weight:800;font-size:1.15rem}
+.qclaim .w b{background:var(--hl);color:var(--hl-ink);padding:0 5px;border-radius:3px}
+.qnum{font-family:var(--f-mono);font-weight:500;color:var(--muted);min-width:1.2em;padding-top:3px}
+button.big{min-height:48px;font-size:1rem;justify-content:center}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js" defer></script>
+</head>
+<body>
+<div class="bar"><div class="wrap">
+  <div class="brand"><span class="mark" aria-hidden="true">PP</span>PackPick</div>
+  <nav class="tabs" aria-label="Sections">
+    <button data-act="nav" data-v="quick">Check a pack</button>
+    <button data-act="nav" data-v="products">Saved</button>
+    <button data-act="more" class="morebtn" id="moreBtn" aria-expanded="false">More ▾</button>
+    <button data-act="nav" data-v="markets" class="sec">Markets</button>
+    <button data-act="nav" data-v="rules" class="sec">Rules</button>
+    <button data-act="nav" data-v="data" class="sec">Backup</button>
+    <button data-act="nav" data-v="guide" class="sec">Guide</button>
+    <button data-act="nav" data-v="settings" class="who sec" id="whoBtn">You</button>
+  </nav>
+</div></div>
+<main><div class="wrap" id="main"><div class="panel"><h2>Loading PackPick…</h2><p class="muted">Connecting to your team's products, market rules and approvals.</p></div></div></main>
+<footer><div class="wrap">PackPick stores data on this device only. Back up from the Backup tab. PackPick recommendations are internal guidance only, not regulatory approval. Before using any claim, QA must independently check the latest official rules for each intended market and verify the product data, calculations, exact wording and any required qualifiers. Do not use a claim on packaging until QA signs off. Always double-check before printing.</div></footer>
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+<input type="file" id="fileUp" accept="image/*" multiple hidden>
+<input type="file" id="fileEv" accept="image/*,application/pdf,text/plain,text/csv" hidden>
+<input type="file" id="fileImport" accept="application/json,.json" hidden>
+
+<script id="seed" type="application/json">{"markets":{"list":[{"code":"AU","name":"Australia"},{"code":"NZ","name":"New Zealand"},{"code":"KE","name":"Kenya"},{"code":"UG","name":"Uganda"},{"code":"BN","name":"Brunei"},{"code":"CL","name":"Chile"},{"code":"CN","name":"China"},{"code":"FJ","name":"Fiji"},{"code":"GT","name":"Guatemala"},{"code":"IN","name":"India"},{"code":"ID","name":"Indonesia"},{"code":"MY","name":"Malaysia"},{"code":"NC","name":"New Caledonia"},{"code":"PA","name":"Panama"},{"code":"RO","name":"Romania"},{"code":"SI","name":"Slovenia"},{"code":"SA","name":"Saudi Arabia"},{"code":"SG","name":"Singapore"},{"code":"TH","name":"Thailand"},{"code":"AE","name":"United Arab Emirates"},{"code":"GB","name":"United Kingdom"},{"code":"US","name":"United States"},{"code":"VN","name":"Vietnam"}]},"rulesets":{"AU":{"code":"AU","name":"Australia","authority":"Food Standards Australia New Zealand (FSANZ): Australia New Zealand Food Standards Code, Standard 1.2.7 and Schedule 4","status":"draft","version":1,"notes":"Drafted by Claude from the Code as understood; every rule must be checked against the current compilation on the Federal Register of Legislation before QA verifies.","rules":[{"id":"low_fat","claim":"low_fat","family":"fat","wording":"Low fat","kind":"threshold","checks":[{"label":"Total fat","nutrients":["fat_total_g"],"basis":"per100","op":"<=","solid":3,"liquid":1.5,"unit":"g"}],"conditions":"No more than 3 g fat per 100 g (solid) or 1.5 g per 100 mL (liquid).","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Fat, 'low'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally (Std 1.2.7 exclusions apply)","appeal":4},{"id":"pct_fat_free","claim":"pct_fat_free","family":"fat","wording":"% fat free","kind":"pctFatFree","checks":[{"label":"Total fat (must meet 'low fat')","nutrients":["fat_total_g"],"basis":"per100","op":"<=","solid":3,"liquid":1.5,"unit":"g"}],"conditions":"A '% fat free' claim may only be made if the food meets the conditions for a 'low fat' claim. Percentage is by weight.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Fat, '% free'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":4},{"id":"low_sat_fat","claim":"low_sat_fat","family":"satfat","wording":"Low saturated fat","kind":"threshold","checks":[{"label":"Saturated + trans fat","nutrients":["fat_saturated_g","fat_trans_g"],"basis":"per100","op":"<=","solid":1.5,"liquid":0.75,"unit":"g"}],"conditions":"Saturated and trans fatty acids together no more than 1.5 g per 100 g (solid) or 0.75 g per 100 mL (liquid).","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Saturated fatty acids, 'low'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":3},{"id":"low_sugar","claim":"low_sugar","family":"sugar","wording":"Low sugar","kind":"threshold","checks":[{"label":"Sugars","nutrients":["sugars_g"],"basis":"per100","op":"<=","solid":5,"liquid":2.5,"unit":"g"}],"conditions":"No more than 5 g sugars per 100 g (solid) or 2.5 g per 100 mL (liquid).","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Sugar or sugars, 'low'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":4},{"id":"no_added_sugar","claim":"no_added_sugar","family":"nas","wording":"No added sugar","kind":"evidence","requires":["noAddedSugars"],"conditions":"The food contains no added sugars (as defined in Standard 1.1.2—2), no ingredients that contain added sugars, and its sugars content is not increased through processing such as hydrolysis. Check the current Schedule 4 text for every condition and exception.","source":"ANZ Food Standards Code, Schedule 4; Standard 1.1.2—2 (added sugars)","clause":"S4—3 table: Sugar or sugars, 'no added'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"QA confirm current compilation","category":"Foods generally","appeal":4},{"id":"low_salt","claim":"low_salt","family":"sodium","wording":"Low salt","kind":"threshold","checks":[{"label":"Sodium","nutrients":["sodium_mg"],"basis":"per100","op":"<=","solid":120,"liquid":120,"unit":"mg"}],"conditions":"No more than 120 mg sodium per 100 g or 100 mL. 'Low sodium' has the same condition.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Sodium or salt, 'low'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":3},{"id":"source_protein","claim":"source_protein","family":"protein","wording":"Source of protein","kind":"threshold","checks":[{"label":"Protein","nutrients":["protein_g"],"basis":"perServing","op":">=","solid":5,"liquid":5,"unit":"g"}],"conditions":"At least 5 g protein per serving.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Protein, 'source'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":3},{"id":"good_protein","claim":"good_protein","family":"protein","wording":"Good source of protein","kind":"threshold","checks":[{"label":"Protein","nutrients":["protein_g"],"basis":"perServing","op":">=","solid":10,"liquid":10,"unit":"g"}],"conditions":"At least 10 g protein per serving. QA to confirm whether 'High protein' is an acceptable equivalent descriptor.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Protein, 'good source'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":5},{"id":"source_fibre","claim":"source_fibre","family":"fibre","wording":"Source of fibre","kind":"threshold","checks":[{"label":"Dietary fibre","nutrients":["dietary_fibre_g"],"basis":"perServing","op":">=","solid":2,"liquid":2,"unit":"g"}],"conditions":"At least 2 g dietary fibre per serving.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Dietary fibre, 'source'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":3},{"id":"good_fibre","claim":"good_fibre","family":"fibre","wording":"Good source of fibre","kind":"threshold","checks":[{"label":"Dietary fibre","nutrients":["dietary_fibre_g"],"basis":"perServing","op":">=","solid":4,"liquid":4,"unit":"g"}],"conditions":"At least 4 g dietary fibre per serving.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Dietary fibre, 'good source'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":4},{"id":"excellent_fibre","claim":"excellent_fibre","family":"fibre","wording":"Excellent source of fibre","kind":"threshold","checks":[{"label":"Dietary fibre","nutrients":["dietary_fibre_g"],"basis":"perServing","op":">=","solid":7,"liquid":7,"unit":"g"}],"conditions":"At least 7 g dietary fibre per serving.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Dietary fibre, 'excellent source'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":5},{"id":"reduced_fat","claim":"reduced_fat","family":"fat","wording":"Reduced fat","kind":"comparative","checks":[{"label":"Fat reduction vs reference food","nutrient":"fat_total_g","minReductionPct":25}],"conditions":"At least 25% less fat than the same quantity of the reference food.","requiredWording":"Identify the reference food and the difference (as a percentage, fraction or amount).","source":"ANZ Food Standards Code, Standard 1.2.7 and Schedule 4","clause":"Std 1.2.7 comparative claims; S4—3 table: Fat, 'reduced'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":3},{"id":"lite","claim":"lite","family":"light","wording":"Lite","kind":"comparative","checks":[{"label":"Fat reduction vs reference food (if 'lite' refers to fat)","nutrient":"fat_total_g","minReductionPct":25}],"conditions":"'Light' or 'lite' about a nutrient or energy must meet the conditions for a 'reduced' claim for that property. If it describes another characteristic (e.g. texture or colour), that characteristic must be stated on the label.","requiredWording":"State what 'lite' refers to, plus the reference food and difference if it's a nutrient claim.","source":"ANZ Food Standards Code, Standard 1.2.7 and Schedule 4","clause":"Std 1.2.7 'light/lite'; S4—3 'reduced'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"QA confirm current compilation","category":"Foods generally","appeal":2}]},"NZ":{"code":"NZ","name":"New Zealand","authority":"Food Standards Australia New Zealand (FSANZ): Australia New Zealand Food Standards Code, Standard 1.2.7 and Schedule 4","status":"draft","version":1,"notes":"Drafted by Claude. The joint Australia New Zealand Food Standards Code (Standard 1.2.7, Schedule 4) also applies in New Zealand. Kept as a separate rule set so QA can verify it independently and record any NZ-specific differences.","rules":[{"id":"low_fat","claim":"low_fat","family":"fat","wording":"Low fat","kind":"threshold","checks":[{"label":"Total fat","nutrients":["fat_total_g"],"basis":"per100","op":"<=","solid":3,"liquid":1.5,"unit":"g"}],"conditions":"No more than 3 g fat per 100 g (solid) or 1.5 g per 100 mL (liquid).","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Fat, 'low'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally (Std 1.2.7 exclusions apply)","appeal":4},{"id":"pct_fat_free","claim":"pct_fat_free","family":"fat","wording":"% fat free","kind":"pctFatFree","checks":[{"label":"Total fat (must meet 'low fat')","nutrients":["fat_total_g"],"basis":"per100","op":"<=","solid":3,"liquid":1.5,"unit":"g"}],"conditions":"A '% fat free' claim may only be made if the food meets the conditions for a 'low fat' claim. Percentage is by weight.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Fat, '% free'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":4},{"id":"low_sat_fat","claim":"low_sat_fat","family":"satfat","wording":"Low saturated fat","kind":"threshold","checks":[{"label":"Saturated + trans fat","nutrients":["fat_saturated_g","fat_trans_g"],"basis":"per100","op":"<=","solid":1.5,"liquid":0.75,"unit":"g"}],"conditions":"Saturated and trans fatty acids together no more than 1.5 g per 100 g (solid) or 0.75 g per 100 mL (liquid).","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Saturated fatty acids, 'low'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":3},{"id":"low_sugar","claim":"low_sugar","family":"sugar","wording":"Low sugar","kind":"threshold","checks":[{"label":"Sugars","nutrients":["sugars_g"],"basis":"per100","op":"<=","solid":5,"liquid":2.5,"unit":"g"}],"conditions":"No more than 5 g sugars per 100 g (solid) or 2.5 g per 100 mL (liquid).","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Sugar or sugars, 'low'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":4},{"id":"no_added_sugar","claim":"no_added_sugar","family":"nas","wording":"No added sugar","kind":"evidence","requires":["noAddedSugars"],"conditions":"The food contains no added sugars (as defined in Standard 1.1.2—2), no ingredients that contain added sugars, and its sugars content is not increased through processing such as hydrolysis. Check the current Schedule 4 text for every condition and exception.","source":"ANZ Food Standards Code, Schedule 4; Standard 1.1.2—2 (added sugars)","clause":"S4—3 table: Sugar or sugars, 'no added'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"QA confirm current compilation","category":"Foods generally","appeal":4},{"id":"low_salt","claim":"low_salt","family":"sodium","wording":"Low salt","kind":"threshold","checks":[{"label":"Sodium","nutrients":["sodium_mg"],"basis":"per100","op":"<=","solid":120,"liquid":120,"unit":"mg"}],"conditions":"No more than 120 mg sodium per 100 g or 100 mL. 'Low sodium' has the same condition.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Sodium or salt, 'low'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":3},{"id":"source_protein","claim":"source_protein","family":"protein","wording":"Source of protein","kind":"threshold","checks":[{"label":"Protein","nutrients":["protein_g"],"basis":"perServing","op":">=","solid":5,"liquid":5,"unit":"g"}],"conditions":"At least 5 g protein per serving.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Protein, 'source'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":3},{"id":"good_protein","claim":"good_protein","family":"protein","wording":"Good source of protein","kind":"threshold","checks":[{"label":"Protein","nutrients":["protein_g"],"basis":"perServing","op":">=","solid":10,"liquid":10,"unit":"g"}],"conditions":"At least 10 g protein per serving. QA to confirm whether 'High protein' is an acceptable equivalent descriptor.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Protein, 'good source'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":5},{"id":"source_fibre","claim":"source_fibre","family":"fibre","wording":"Source of fibre","kind":"threshold","checks":[{"label":"Dietary fibre","nutrients":["dietary_fibre_g"],"basis":"perServing","op":">=","solid":2,"liquid":2,"unit":"g"}],"conditions":"At least 2 g dietary fibre per serving.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Dietary fibre, 'source'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":3},{"id":"good_fibre","claim":"good_fibre","family":"fibre","wording":"Good source of fibre","kind":"threshold","checks":[{"label":"Dietary fibre","nutrients":["dietary_fibre_g"],"basis":"perServing","op":">=","solid":4,"liquid":4,"unit":"g"}],"conditions":"At least 4 g dietary fibre per serving.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Dietary fibre, 'good source'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":4},{"id":"excellent_fibre","claim":"excellent_fibre","family":"fibre","wording":"Excellent source of fibre","kind":"threshold","checks":[{"label":"Dietary fibre","nutrients":["dietary_fibre_g"],"basis":"perServing","op":">=","solid":7,"liquid":7,"unit":"g"}],"conditions":"At least 7 g dietary fibre per serving.","source":"ANZ Food Standards Code, Schedule 4","clause":"S4—3 table: Dietary fibre, 'excellent source'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":5},{"id":"reduced_fat","claim":"reduced_fat","family":"fat","wording":"Reduced fat","kind":"comparative","checks":[{"label":"Fat reduction vs reference food","nutrient":"fat_total_g","minReductionPct":25}],"conditions":"At least 25% less fat than the same quantity of the reference food.","requiredWording":"Identify the reference food and the difference (as a percentage, fraction or amount).","source":"ANZ Food Standards Code, Standard 1.2.7 and Schedule 4","clause":"Std 1.2.7 comparative claims; S4—3 table: Fat, 'reduced'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"2016-01-18 (QA confirm current compilation)","category":"Foods generally","appeal":3},{"id":"lite","claim":"lite","family":"light","wording":"Lite","kind":"comparative","checks":[{"label":"Fat reduction vs reference food (if 'lite' refers to fat)","nutrient":"fat_total_g","minReductionPct":25}],"conditions":"'Light' or 'lite' about a nutrient or energy must meet the conditions for a 'reduced' claim for that property. If it describes another characteristic (e.g. texture or colour), that characteristic must be stated on the label.","requiredWording":"State what 'lite' refers to, plus the reference food and difference if it's a nutrient claim.","source":"ANZ Food Standards Code, Standard 1.2.7 and Schedule 4","clause":"Std 1.2.7 'light/lite'; S4—3 'reduced'","url":"https://www.foodstandards.gov.au/business/labelling/nutrition-health-and-related-claims","effectiveDate":"QA confirm current compilation","category":"Foods generally","appeal":2}]},"GB":{"code":"GB","name":"United Kingdom","authority":"Regulation (EC) No 1924/2006 on nutrition and health claims, as retained in Great Britain (Annex: nutrition claims and conditions)","status":"draft","version":1,"notes":"Drafted by Claude. Applies in Great Britain; Northern Ireland follows the EU version. Check the current GB text on legislation.gov.uk and any DHSC guidance before verifying.","rules":[{"id":"low_fat","claim":"low_fat","family":"fat","wording":"Low fat","kind":"threshold","checks":[{"label":"Total fat","nutrients":["fat_total_g"],"basis":"per100","op":"<=","solid":3,"liquid":1.5,"unit":"g"}],"conditions":"No more than 3 g fat per 100 g (solid) or 1.5 g per 100 mL (liquid; 1.8 g for semi-skimmed milk).","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: LOW FAT","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained; QA confirm amendments)","category":"Foods generally (GB)","appeal":4},{"id":"pct_fat_free","claim":"pct_fat_free","family":"fat","wording":"% fat free","kind":"notPermitted","conditions":"The Annex has no '% fat free' claim, so it isn't a permitted nutrition claim. 'Fat-free' needs no more than 0.5 g fat per 100 g or 100 mL.","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: FAT-FREE","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":4},{"id":"low_sat_fat","claim":"low_sat_fat","family":"satfat","wording":"Low saturated fat","kind":"threshold","checks":[{"label":"Saturated + trans fat","nutrients":["fat_saturated_g","fat_trans_g"],"basis":"per100","op":"<=","solid":1.5,"liquid":0.75,"unit":"g"},{"label":"Saturated + trans fat share of energy","nutrients":["fat_saturated_g","fat_trans_g"],"basis":"energyPct","op":"<=","solid":10,"liquid":10,"unit":"%"}],"conditions":"Saturated plus trans fatty acids no more than 1.5 g per 100 g (solid) or 0.75 g per 100 mL (liquid), and no more than 10% of energy in either case.","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: LOW SATURATED FAT","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":3},{"id":"low_sugar","claim":"low_sugar","family":"sugar","wording":"Low sugar","kind":"threshold","checks":[{"label":"Sugars","nutrients":["sugars_g"],"basis":"per100","op":"<=","solid":5,"liquid":2.5,"unit":"g"}],"conditions":"No more than 5 g sugars per 100 g (solid) or 2.5 g per 100 mL (liquid). The Annex term is 'low sugars'; claims likely to have the same meaning are allowed. QA to confirm the exact wording.","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: LOW SUGARS","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":4},{"id":"no_added_sugar","claim":"no_added_sugar","family":"nas","wording":"No added sugar","kind":"evidence","requires":["noAddedSugars"],"requiredIf":[{"label":"Sugars naturally present","nutrients":["sugars_g"],"basis":"per100","op":">=","solid":0.01,"liquid":0.01,"unit":"g","text":"'CONTAINS NATURALLY OCCURRING SUGARS' (sugars are naturally present)"}],"conditions":"No added mono- or disaccharides or any other food used for its sweetening properties. Where sugars are naturally present, the label should also state 'CONTAINS NATURALLY OCCURRING SUGARS'. The Annex term is 'with no added sugars'.","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: WITH NO ADDED SUGARS","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":4},{"id":"low_salt","claim":"low_salt","family":"sodium","wording":"Low salt","kind":"threshold","checks":[{"label":"Sodium","nutrients":["sodium_mg"],"basis":"per100","op":"<=","solid":120,"liquid":120,"unit":"mg"}],"conditions":"No more than 0.12 g sodium (0.3 g salt) per 100 g or 100 mL. Waters have a separate condition.","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: LOW SODIUM/SALT","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":3},{"id":"source_protein","claim":"source_protein","family":"protein","wording":"Source of protein","kind":"threshold","checks":[{"label":"Energy from protein","nutrients":["protein_g"],"basis":"energyPct","op":">=","solid":12,"liquid":12,"unit":"%"}],"conditions":"At least 12% of the energy value of the food is provided by protein.","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: SOURCE OF PROTEIN","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":3},{"id":"high_protein","claim":"high_protein","family":"protein","wording":"High protein","kind":"threshold","checks":[{"label":"Energy from protein","nutrients":["protein_g"],"basis":"energyPct","op":">=","solid":20,"liquid":20,"unit":"%"}],"conditions":"At least 20% of the energy value of the food is provided by protein.","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: HIGH PROTEIN","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":5},{"id":"source_fibre","claim":"source_fibre","family":"fibre","wording":"Source of fibre","kind":"threshold","logic":"any","checks":[{"label":"Fibre per 100 g","nutrients":["dietary_fibre_g"],"basis":"per100","op":">=","solid":3,"liquid":3,"unit":"g"},{"label":"Fibre per 100 kcal","nutrients":["dietary_fibre_g"],"basis":"per100kcal","op":">=","solid":1.5,"liquid":1.5,"unit":"g"}],"conditions":"At least 3 g fibre per 100 g, or at least 1.5 g fibre per 100 kcal.","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: SOURCE OF FIBRE","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":3},{"id":"high_fibre","claim":"high_fibre","family":"fibre","wording":"High fibre","kind":"threshold","logic":"any","checks":[{"label":"Fibre per 100 g","nutrients":["dietary_fibre_g"],"basis":"per100","op":">=","solid":6,"liquid":6,"unit":"g"},{"label":"Fibre per 100 kcal","nutrients":["dietary_fibre_g"],"basis":"per100kcal","op":">=","solid":3,"liquid":3,"unit":"g"}],"conditions":"At least 6 g fibre per 100 g, or at least 3 g fibre per 100 kcal.","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: HIGH FIBRE","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":5},{"id":"reduced_fat","claim":"reduced_fat","family":"fat","wording":"Reduced fat","kind":"comparative","checks":[{"label":"Fat reduction vs similar products","nutrient":"fat_total_g","minReductionPct":30}],"conditions":"At least 30% less fat than a similar product, compared with a range of foods of the same category (Art. 9).","requiredWording":"Identify the comparison and the difference.","source":"Reg (EC) 1924/2006 (GB retained), Annex and Art. 9","clause":"Annex: REDUCED [NAME OF NUTRIENT]","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":3},{"id":"lite","claim":"lite","family":"light","wording":"Lite","kind":"comparative","checks":[{"label":"Fat reduction vs similar products (if 'lite' refers to fat)","nutrient":"fat_total_g","minReductionPct":30}],"conditions":"'Light/lite' must meet the conditions for 'reduced' and be accompanied by an indication of the characteristic(s) that make the food 'light' or 'lite'.","requiredWording":"State the characteristic that makes the food 'lite'.","source":"Reg (EC) 1924/2006 (GB retained), Annex","clause":"Annex: LIGHT/LITE","url":"https://www.legislation.gov.uk/eur/2006/1924/annex","effectiveDate":"2021-01-01 (GB retained)","category":"Foods generally (GB)","appeal":2}]},"US":{"code":"US","name":"United States","authority":"US Food and Drug Administration: 21 CFR Part 101, Subpart D (nutrient content claims)","status":"draft","version":1,"notes":"Drafted by Claude. Most US claims are assessed per RACC (21 CFR 101.12), so QA must confirm the product's RACC; foods with a RACC of 30 g or less are also checked per 50 g. Check the current eCFR text before verifying.","rules":[{"id":"low_fat","claim":"low_fat","family":"fat","wording":"Low fat","kind":"threshold","checks":[{"label":"Fat per RACC","nutrients":["fat_total_g"],"basis":"perRACC","op":"<=","solid":3,"liquid":3,"unit":"g"},{"label":"Fat per 50 g (RACC ≤ 30 g)","nutrients":["fat_total_g"],"basis":"per50g","onlyIfRaccLe":30,"op":"<=","solid":3,"liquid":3,"unit":"g"}],"conditions":"3 g or less fat per RACC, and per 50 g if the RACC is 30 g or less (or 2 tbsp or less).","source":"21 CFR 101.62","clause":"101.62(b)(2)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.62","effectiveDate":"QA confirm current eCFR","category":"Foods other than meals and main dishes","appeal":4},{"id":"pct_fat_free","claim":"pct_fat_free","family":"fat","wording":"% fat free","kind":"pctFatFree","checks":[{"label":"Fat per RACC (must meet 'low fat')","nutrients":["fat_total_g"],"basis":"perRACC","op":"<=","solid":3,"liquid":3,"unit":"g"},{"label":"Fat per 50 g (RACC ≤ 30 g)","nutrients":["fat_total_g"],"basis":"per50g","onlyIfRaccLe":30,"op":"<=","solid":3,"liquid":3,"unit":"g"}],"conditions":"Only for foods that meet 'low fat' (or 'fat free'). The percentage is the amount of fat in 100 g of food.","source":"21 CFR 101.62","clause":"101.62(b)(6)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.62","effectiveDate":"QA confirm current eCFR","category":"Foods other than meals and main dishes","appeal":3},{"id":"low_sat_fat","claim":"low_sat_fat","family":"satfat","wording":"Low saturated fat","kind":"threshold","checks":[{"label":"Saturated fat per RACC","nutrients":["fat_saturated_g"],"basis":"perRACC","op":"<=","solid":1,"liquid":1,"unit":"g"},{"label":"Calories from saturated fat","nutrients":["fat_saturated_g"],"basis":"energyPct","op":"<=","solid":15,"liquid":15,"unit":"%"}],"conditions":"1 g or less saturated fat per RACC, and no more than 15% of calories from saturated fat.","source":"21 CFR 101.62","clause":"101.62(c)(2)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.62","effectiveDate":"QA confirm current eCFR","category":"Foods other than meals and main dishes","appeal":3},{"id":"low_sugar","claim":"low_sugar","family":"sugar","wording":"Low sugar","kind":"notPermitted","conditions":"FDA has not defined 'low sugar'. 21 CFR 101.60(c) defines only 'sugar free', 'reduced/less sugar' and 'no added sugar', so 'low sugar' can't be used.","source":"21 CFR 101.60","clause":"101.60(c)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.60","effectiveDate":"QA confirm current eCFR","category":"All foods","appeal":4},{"id":"no_added_sugar","claim":"no_added_sugar","family":"nas","wording":"No added sugar","kind":"evidence","requires":["noAddedSugars","usResemblesSugarFood"],"requiredIf":[{"label":"Energy per RACC above 40 kcal","nutrients":["energy_kj"],"basis":"perRACC","op":">=","solid":167.4,"liquid":167.4,"unit":"kJ","text":"'Not a low calorie food' (or 'not for weight control'), because the food is not low or reduced calorie"}],"conditions":"No sugar or sugar-containing ingredient is added during processing or packing; no ingredient (e.g. concentrated juice) is added that substitutes for sugar; processing doesn't increase sugars above the ingredients' natural content; and the food it resembles and substitutes for normally contains added sugars.","source":"21 CFR 101.60","clause":"101.60(c)(2)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.60","effectiveDate":"QA confirm current eCFR","category":"All foods","appeal":4},{"id":"low_sodium","claim":"low_sodium","family":"sodium","wording":"Low sodium","kind":"threshold","checks":[{"label":"Sodium per RACC","nutrients":["sodium_mg"],"basis":"perRACC","op":"<=","solid":140,"liquid":140,"unit":"mg"},{"label":"Sodium per 50 g (RACC ≤ 30 g)","nutrients":["sodium_mg"],"basis":"per50g","onlyIfRaccLe":30,"op":"<=","solid":140,"liquid":140,"unit":"mg"}],"conditions":"140 mg or less sodium per RACC, and per 50 g if the RACC is 30 g or less.","source":"21 CFR 101.61","clause":"101.61(b)(4)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.61","effectiveDate":"QA confirm current eCFR","category":"Foods other than meals and main dishes","appeal":3},{"id":"good_protein","claim":"good_protein","family":"protein","wording":"Good source of protein","kind":"threshold","requires":["usPdcaas"],"checks":[{"label":"Protein per RACC (10% of 50 g DV)","nutrients":["protein_g"],"basis":"perRACC","op":">=","solid":5,"liquid":5,"unit":"g"}],"conditions":"10–19% of the Daily Value (50 g) per RACC. A protein claim also requires the PDCAAS-corrected %DV for protein in the Nutrition Facts.","source":"21 CFR 101.54 and 101.9(c)(7)","clause":"101.54(c)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.54","effectiveDate":"QA confirm current eCFR","category":"All foods","appeal":3},{"id":"high_protein","claim":"high_protein","family":"protein","wording":"High protein","kind":"threshold","requires":["usPdcaas"],"checks":[{"label":"Protein per RACC (20% of 50 g DV)","nutrients":["protein_g"],"basis":"perRACC","op":">=","solid":10,"liquid":10,"unit":"g"}],"conditions":"20% or more of the Daily Value (50 g) per RACC, with the PDCAAS-corrected %DV declared.","source":"21 CFR 101.54 and 101.9(c)(7)","clause":"101.54(b)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.54","effectiveDate":"QA confirm current eCFR","category":"All foods","appeal":5},{"id":"good_fiber","claim":"good_fiber","family":"fibre","wording":"Good source of fiber","kind":"threshold","checks":[{"label":"Fiber per RACC (10% of 28 g DV)","nutrients":["dietary_fibre_g"],"basis":"perRACC","op":">=","solid":2.8,"liquid":2.8,"unit":"g"}],"conditions":"10–19% of the Daily Value (28 g) per RACC. US 'dietary fiber' counts only fibers that meet FDA's definition, which can differ from the AU/NZ NIP value. QA to confirm.","requiredIf":[{"label":"Fat per RACC above 3 g","nutrients":["fat_total_g"],"basis":"perRACC","op":">=","solid":3.01,"liquid":3.01,"unit":"g","text":"Disclose the total fat per labeled serving next to the fiber claim (the food is not low fat)"}],"source":"21 CFR 101.54","clause":"101.54(c), (d)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.54","effectiveDate":"QA confirm current eCFR","category":"All foods","appeal":3},{"id":"high_fiber","claim":"high_fiber","family":"fibre","wording":"High fiber","kind":"threshold","checks":[{"label":"Fiber per RACC (20% of 28 g DV)","nutrients":["dietary_fibre_g"],"basis":"perRACC","op":">=","solid":5.6,"liquid":5.6,"unit":"g"}],"conditions":"20% or more of the Daily Value (28 g) per RACC. If the food isn't low fat, the total fat level must be disclosed next to the claim.","requiredIf":[{"label":"Fat per RACC above 3 g","nutrients":["fat_total_g"],"basis":"perRACC","op":">=","solid":3.01,"liquid":3.01,"unit":"g","text":"Disclose the total fat per labeled serving next to the fiber claim (the food is not low fat)"}],"source":"21 CFR 101.54","clause":"101.54(b), (d)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.54","effectiveDate":"QA confirm current eCFR","category":"All foods","appeal":5},{"id":"reduced_fat","claim":"reduced_fat","family":"fat","wording":"Reduced fat","kind":"comparative","checks":[{"label":"Fat reduction vs reference food (per RACC)","nutrient":"fat_total_g","minReductionPct":25}],"conditions":"At least 25% less fat per RACC than an appropriate reference food. The reference food doesn't itself qualify as 'low fat'.","requiredWording":"Identify the reference food and the percentage (or fraction) of the difference, with quantitative information next to the most prominent claim.","source":"21 CFR 101.62 and 101.13(j)","clause":"101.62(b)(4)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.62","effectiveDate":"QA confirm current eCFR","category":"Foods other than meals and main dishes","appeal":3},{"id":"lite","claim":"lite","family":"light","wording":"Lite","kind":"comparative","logic":"any","checks":[{"label":"Energy reduction vs reference food","nutrient":"energy_kj","minReductionPct":33.3},{"label":"Fat reduction vs reference food","nutrient":"fat_total_g","minReductionPct":50}],"conditions":"At least one-third fewer calories, or 50% less fat if 50% or more of calories come from fat, than the reference food (other conditions apply). 'Light' describing texture or colour must say so (e.g. 'light in texture').","requiredWording":"Identify the reference food and the difference, or state the physical characteristic.","source":"21 CFR 101.56","clause":"101.56(b)","url":"https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-D/section-101.56","effectiveDate":"QA confirm current eCFR","category":"Foods other than meals and main dishes","appeal":2}]}}}</script>
+<script>
+"use strict";
+/* ---------- constants ---------- */
+const NUTS=[
+ {k:'energy_kj',label:'Energy',unit:'kJ'},{k:'protein_g',label:'Protein',unit:'g'},
+ {k:'fat_total_g',label:'Fat, total',unit:'g'},{k:'fat_saturated_g',label:'– saturated',unit:'g'},{k:'fat_trans_g',label:'– trans',unit:'g'},
+ {k:'carbohydrate_g',label:'Carbohydrate',unit:'g'},{k:'sugars_g',label:'– sugars',unit:'g'},
+ {k:'dietary_fibre_g',label:'Dietary fibre',unit:'g'},{k:'sodium_mg',label:'Sodium',unit:'mg'}];
+const NUT=Object.fromEntries(NUTS.map(n=>[n.k,n]));
+const UNIT_OPTS={kJ:['kJ','kcal'],g:['g','mg'],mg:['mg','g']};
+const EVID={
+ noAddedSugars:{label:'No added sugars in the formulation, including every sub-ingredient',help:'confirm from the formulation sheet and supplier specifications that no sugars, honey, malt, syrups, maltodextrin or concentrated juices are added, and that processing does not increase sugars.'},
+ usResemblesSugarFood:{label:'US: the food this product resembles normally contains added sugars',help:'confirm the reference food category normally contains added sugars (21 CFR 101.60(c)(2)(iv)).'},
+ usPdcaas:{label:'US: PDCAAS-corrected protein %DV is available for the label',help:'provide the protein digestibility (PDCAAS) calculation from the lab or formulation team.'}};
+const CATS={savoury:'savoury cracker or crispbread',sweet:'sweet biscuit or snack',cereal:'breakfast cereal',beverage:'beverage',dairy:'dairy product',other:'food'};
+const REL={savoury:{fat:4,satfat:3,sugar:2,nas:2,sodium:4,protein:3,fibre:4,light:3},sweet:{fat:3,satfat:3,sugar:5,nas:5,sodium:2,protein:3,fibre:3,light:3},cereal:{fat:3,satfat:2,sugar:5,nas:4,sodium:3,protein:4,fibre:5,light:2},beverage:{fat:2,satfat:2,sugar:5,nas:5,sodium:2,protein:4,fibre:2,light:3},dairy:{fat:5,satfat:4,sugar:4,nas:3,sodium:2,protein:5,fibre:1,light:3},other:{}};
+const FAMLABEL={fat:'fat',satfat:'saturated fat',sugar:'sugar',nas:'added sugar',sodium:'sodium',protein:'protein',fibre:'fibre',light:'"light"'};
+const SUGAR_TERMS=['sugar','sugars','sucrose','glucose','dextrose','fructose','lactose','maltose','galactose','syrup','honey','malt','malt extract','maltodextrin','molasses','treacle','invert','agave','nectar','juice concentrate','concentrated fruit juice','concentrated juice','deionised','deionized','rapadura','panela','jaggery'];
+const STLABEL={meets:'Meets checked rules',fails:'Does not meet rules',needs:'Needs evidence',pending:'Market rules pending'};
+const BASIS={per100:'per 100 g',perServing:'per serving',perRACC:'per RACC',per50g:'per 50 g',energyPct:'% of energy',per100kcal:'per 100 kcal'};
+
+/* ---------- SAMPLE demo data (clearly labelled, never real pack data) ---------- */
+const SAMPLE_DETAILS={company:'Sample Foods Co. (SAMPLE)',brand:'Sample Brand',name:'Rice Crispbread Lite (SAMPLE DATA)',sku:'SAMPLE-001',packVersion:'SAMPLE v1',categoryKind:'savoury',physical:'solid',usRaccG:null};
+const SAMPLE_EXTRACTION={
+ source:'SAMPLE extraction of SAMPLE pack images (no real pack data)',
+ servingSize:{value:12,unit:'g'},servingsPerPack:'approx. 10',
+ nutrients:{
+  energy_kj:{perServing:194,per100:1615,unit:'kJ'},protein_g:{perServing:0.9,per100:7.6,unit:'g'},
+  fat_total_g:{perServing:0.3,per100:2.6,unit:'g'},fat_saturated_g:{perServing:0.1,per100:0.5,unit:'g'},
+  fat_trans_g:{perServing:null,per100:null,unit:'g',flag:{type:'missing',note:'Trans fat is not printed on the NIP.',status:'open'}},
+  carbohydrate_g:{perServing:9.9,per100:82.4,unit:'g'},
+  sugars_g:{perServing:0.1,per100:12,unit:'g',flag:{type:'blurry',note:'Per-100 g sugars is blurred on the photo. Read as "12".',status:'open'}},
+  dietary_fibre_g:{perServing:0.4,per100:3.4,unit:'g'},sodium_mg:{perServing:31,per100:260,unit:'mg'}},
+ ingredientsText:'Rice flour (45%), maize starch, rice bran, sunflower oil, salt, raising agent (500), emulsifier (soy lecithin)',
+ warnings:['SAMPLE DATA: replace with the real pack before any decision.']};
+
+function sampleNipSvg(){
+ const rows=[['Energy','194 kJ','1615 kJ'],['Protein','0.9 g','7.6 g'],['Fat, total','0.3 g','2.6 g'],['– saturated','0.1 g','0.5 g'],['Carbohydrate','9.9 g','82.4 g'],['– sugars','0.1 g','__BLUR__'],['Dietary fibre','0.4 g','3.4 g'],['Sodium','31 mg','260 mg']];
+ let y=128,body='';
+ rows.forEach(r=>{body+=`<line x1="14" y1="${y-18}" x2="346" y2="${y-18}" stroke="#000" stroke-width=".8"/><text x="20" y="${y}" font-size="14">${r[0]}</text><text x="230" y="${y}" font-size="14" text-anchor="end">${r[1]}</text>`+(r[2]==='__BLUR__'?`<text x="336" y="${y}" font-size="14" text-anchor="end" filter="url(#b)">1.2 g</text>`:`<text x="336" y="${y}" font-size="14" text-anchor="end">${r[2]}</text>`);y+=28;});
+ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 380" font-family="Arial,Helvetica,sans-serif"><defs><filter id="b"><feGaussianBlur stdDeviation="2.2"/></filter></defs><rect width="360" height="380" fill="#fbfaf6"/><rect x="8" y="8" width="344" height="${y-14}" fill="#fff" stroke="#000" stroke-width="2"/><text x="180" y="34" font-size="17" font-weight="700" text-anchor="middle">NUTRITION INFORMATION</text><text x="20" y="58" font-size="12">Servings per package: approx. 10</text><text x="20" y="76" font-size="12">Serving size: 12 g (3 crispbreads)</text><text x="230" y="100" font-size="11" font-weight="700" text-anchor="end">Avg qty per serving</text><text x="336" y="100" font-size="11" font-weight="700" text-anchor="end">per 100 g</text>${body}<text x="180" y="250" font-size="46" font-weight="700" fill="#d40000" fill-opacity=".22" text-anchor="middle" transform="rotate(-24 180 210)">SAMPLE DATA</text></svg>`;}
+function sampleIngSvg(){
+ const lines=['INGREDIENTS: Rice flour (45%), maize','starch, rice bran, sunflower oil, salt,','raising agent (500), emulsifier (soy','lecithin).','','CONTAINS SOY.'];
+ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 190" font-family="Arial,Helvetica,sans-serif"><rect width="360" height="190" fill="#fbfaf6"/>${lines.map((l,i)=>`<text x="16" y="${34+i*22}" font-size="15" ${i===5?'font-weight="700"':''}>${l}</text>`).join('')}<text x="180" y="120" font-size="40" font-weight="700" fill="#d40000" fill-opacity=".22" text-anchor="middle" transform="rotate(-14 180 100)">SAMPLE DATA</text></svg>`;}
+const svgUrl=s=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s);
+
+/* ---------- state ---------- */
+const S={db:null,me:{id:null},role:'packaging',blobUrls:{},canEdit:false,ready:false,dbMissing:false,
+ products:{},rulesets:{},markets:null,approvals:{},loaded:{p:false,r:false,m:false,a:false},
+ view:'quick',pid:null,step:'details',mem:{},busy:'',ai:{},rulesMarket:'AU',editRule:null,approving:null,profiles:{},err:''};
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>(v===null||v===undefined||v===''||isNaN(+v))?null:+v;
+function fmt(v,d=2){if(v===null||v===undefined||isNaN(v))return '—';const r=Math.round(v*10**d)/10**d;return String(r);}
+const now=()=>new Date().toISOString();
+const day=iso=>iso?new Date(iso).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}):'—';
+const uid=()=>'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const clone=o=>JSON.parse(JSON.stringify(o??null));
+function hash(o){const s=JSON.stringify(o??null);let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return (h>>>0).toString(36);}
+function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,3200);}
+function chip(st,txt){return `<span class="chip st-${st}">${esc(txt||STLABEL[st]||st)}</span>`}
+const P=()=>S.products[S.pid];
+const per100Label=p=>(p.physical==='liquid')?'per 100 mL':'per 100 g';
+const nameOf=id=>id||'—';
+
+/* ---------- canonical values ---------- */
+function toCanon(k,v,unit){const c=NUT[k].unit;unit=unit||c;if(unit===c)return v;if(c==='kJ'&&/kcal/i.test(unit))return v*4.184;if(c==='mg'&&unit==='g')return v*1000;if(c==='g'&&unit==='mg')return v/1000;return v;}
+function nv(p,k,col){const n=p.extracted?.nutrients?.[k];if(!n)return null;const v=num(n[col]);return v===null?null:toCanon(k,v,n.unit);}
+function dataHash(p){return hash({x:p.extracted&&{s:p.extracted.servingSize,n:Object.fromEntries(Object.entries(p.extracted.nutrients||{}).map(([k,n])=>[k,[n.perServing,n.per100,n.unit]])),i:p.extracted.ingredientsText},ev:Object.fromEntries(Object.entries(p.evidenceChecks||{}).map(([k,e])=>[k,!!e.confirmed])),ref:p.reference,ph:p.physical,r:p.usRaccG,c:p.categoryKind});}
+
+/* ---------- validation of extracted values ---------- */
+function issuesFor(p){
+ const x=p.extracted||{},ns=x.nutrients||{},ss=num(x.servingSize?.value),out={};
+ for(const {k} of NUTS){const n=ns[k]||{};const a=num(n.perServing),b=num(n.per100);
+  if(a===null&&b===null){out[k]={type:'missing',note:'No value read for either column. Missing is never treated as zero.'};continue;}
+  if(a===null||b===null){out[k]={type:'missing',note:(a===null?'Per serving':'Per 100')+' value is missing.'};continue;}
+  if(ss){const exp=b*ss/100,tol=Math.max(exp*.2,NUT[k].unit==='g'?0.15:NUT[k].unit==='mg'?5:10);if(Math.abs(exp-a)>tol)out[k]={type:'conflict',note:`Per serving (${a}) doesn't match per 100 × serving size (expected ≈ ${fmt(exp,1)}).`};}}
+ for(const {k} of NUTS){const n=ns[k];if(!n||NUT[k].unit==='kJ'||out[k])continue;const b=num(n.per100);if(b!==null&&toCanon(k,b,n.unit)>(NUT[k].unit==='mg'?100000:100))out[k]={type:'conflict',note:'More than 100 g per 100 g isn\'t possible. A decimal point was probably missed.'};}
+ const s=num(ns.sugars_g?.per100),c=num(ns.carbohydrate_g?.per100);if(s!==null&&c!==null&&s>c)out.sugars_g={type:'conflict',note:'Sugars are higher than total carbohydrate.'};
+ const sf=num(ns.fat_saturated_g?.per100),tf=num(ns.fat_total_g?.per100);if(sf!==null&&tf!==null&&sf>tf)out.fat_saturated_g={type:'conflict',note:'Saturated fat is higher than total fat.'};
+ return out;}
+function mergeFlags(p,edited){
+ const iss=issuesFor(p),ns=p.extracted.nutrients;
+ for(const {k} of NUTS){const n=ns[k]=ns[k]||{unit:NUT[k].unit,perServing:null,per100:null};const f=n.flag,i=iss[k];
+  const reopen=()=>{n.flag={...i,status:'open',orig:f?.orig||null};};
+  if(i){ if(!f) reopen();
+   else if(f.status==='open'){ if(f.type==='blurry'&&edited===k)reopen(); else if(f.type!==i.type&&f.type!=='blurry')reopen(); else if(f.type==='blurry'&&!f.note.includes(i.note)) f.note+=' '+i.note; }
+   else if(f.status==='corrected'||(f.status==='acknowledged'&&f.type!==i.type)) reopen();
+  } else if(f&&f.status==='open'&&(f.type!=='blurry'||edited===k)){f.status='corrected';f.at=now();f.by=S.me?.id||null;}
+ }}
+const openFlags=p=>NUTS.filter(({k})=>p.extracted?.nutrients?.[k]?.flag?.status==='open');
+
+/* ---------- rule engine (deterministic) ---------- */
+function sugarHits(txt){const t=' '+txt.toLowerCase()+' ';return SUGAR_TERMS.filter(w=>new RegExp('[^a-z]'+w.replace(/ /g,'\\s+')+'[^a-z]').test(t));}
+function computeWording(rule,p){if(rule.claim==='pct_fat_free'){const f=nv(p,'fat_total_g','per100');return f===null?'__% fat free':`${Math.floor(100-f)}% fat free`;}return rule.wording;}
+function basisValue(p,c){
+ const keys=c.nutrients,lab=per100Label(p);const inputs=[],missing=[];
+ const get=(k,col)=>{if(isFlagged(p,k)){missing.push(`${NUT[k].label.replace('– ','')} (highlighted: check the number)`);return null;}const v=nv(p,k,col);if(v===null)missing.push(`${NUT[k].label.replace('– ','')} ${col==='per100'?lab:'per serving'}`);else inputs.push({label:NUT[k].label.replace('– ',''),value:v,unit:NUT[k].unit,col:col==='per100'?lab:'per serving'});return v;};
+ const sum100=()=>{const vs=keys.map(k=>get(k,'per100'));return vs.some(v=>v===null)?null:vs.reduce((a,b)=>a+b,0);};
+ const sumTxt=()=>keys.length>1?keys.map(k=>fmt(nv(p,k,'per100'))).join(' + ')+' = ':'';
+ let value=null,formula='';
+ switch(c.basis){
+  case 'per100':value=sum100();if(value!==null&&keys.length>1)formula=`${sumTxt()}${fmt(value)} ${c.unit} ${lab}`;break;
+  case 'perServing':{const ss=num(p.extracted?.servingSize?.value);const vs=keys.map(k=>{if(isFlagged(p,k)){missing.push(`${NUT[k].label.replace('– ','')} (highlighted: check the number)`);return null;}const v=nv(p,k,'perServing');if(v!==null){inputs.push({label:NUT[k].label.replace('– ',''),value:v,unit:NUT[k].unit,col:'per serving'});return v;}
+     const b=nv(p,k,'per100');if(b!==null&&ss){formula+=`${NUT[k].label.replace('– ','')}: ${fmt(b)} ${lab} × ${ss} g ÷ 100 = ${fmt(b*ss/100)} per serving (derived)\n`;return b*ss/100;}missing.push(`${NUT[k].label.replace('– ','')} per serving`);return null;});
+     value=vs.some(v=>v===null)?null:vs.reduce((a,b)=>a+b,0);if(ss)inputs.push({label:'Serving size',value:ss,unit:p.extracted.servingSize.unit||'g',col:'confirmed'});break;}
+  case 'perRACC':{const r=num(p.usRaccG);if(r===null)missing.push('US RACC (21 CFR 101.12)');const s=sum100();if(s!==null&&r!==null){value=s*r/100;formula=`${sumTxt()}${fmt(s)} ${c.unit} ${lab} × ${r} g RACC ÷ 100 = ${fmt(value)} ${c.unit} per RACC`;inputs.push({label:'RACC',value:r,unit:'g',col:'QA entered'});}break;}
+  case 'per50g':{const s=sum100();if(s!==null){value=s*.5;formula=`${fmt(s)} ${c.unit} ${lab} × 50 ÷ 100 = ${fmt(value)} ${c.unit} per 50 g`;}break;}
+  case 'energyPct':{const E=get('energy_kj','per100');const parts=keys.map(k=>{const v=get(k,'per100');return v===null?null:{k,v,f:k==='protein_g'?17:37};});
+     if(E&&parts.every(Boolean)){const kj=parts.reduce((a,x)=>a+x.v*x.f,0);value=kj/E*100;formula=parts.map(x=>`${fmt(x.v)} g × ${x.f} kJ/g`).join(' + ')+` = ${fmt(kj,1)} kJ; ${fmt(kj,1)} ÷ ${fmt(E,0)} kJ × 100 = ${fmt(value,1)}% of energy`;}break;}
+  case 'per100kcal':{const E=get('energy_kj','per100');const s=sum100();if(E&&s!==null){const kcal=E/4.184;value=s*100/kcal;formula=`${fmt(E,0)} kJ ÷ 4.184 = ${fmt(kcal,0)} kcal ${lab}; ${fmt(s)} g × 100 ÷ ${fmt(kcal,0)} = ${fmt(value)} g per 100 kcal`;}break;}
+ }
+ return {value,formula:formula.trim(),inputs,missing};}
+function evalCheck(p,c){
+ const phys=p.physical||'solid';
+ if(c.onlyIfRaccLe!=null){const r=num(p.usRaccG);if(r===null)return {label:c.label,result:'missing',detail:'US RACC needed to know whether the per-50 g condition applies.',missing:['US RACC']};if(r>c.onlyIfRaccLe)return {label:c.label,result:'na',detail:`Not applicable: RACC ${r} g is above ${c.onlyIfRaccLe} g.`};}
+ const thr=phys==='liquid'?(c.liquid??null):c.solid;
+ if(thr===null||thr===undefined)return {label:c.label,result:'fail',detail:`This rule sets no condition for ${phys} foods.`};
+ const bv=basisValue(p,c);
+ if(bv.value===null)return {label:c.label,result:'missing',detail:'Missing: '+bv.missing.join(', '),missing:bv.missing,inputs:bv.inputs};
+ const pass=c.op==='<='?bv.value<=thr+1e-9:bv.value>=thr-1e-9;
+ const head=c.op==='<='?(thr-bv.value)/thr:(bv.value-thr)/thr;
+ return {label:c.label,result:pass?'pass':'fail',value:bv.value,thr,op:c.op,unit:c.unit,basis:c.basis,formula:bv.formula,inputs:bv.inputs,head};}
+function evalRule(rule,p){
+ const out={rule,wording:computeWording(rule,p),checks:[],status:'fails',reasons:[],required:[],head:null,score:0};
+ if(rule.kind==='notPermitted'){out.status='fails';out.reasons.push(rule.conditions);out.checks.push({label:'Claim permitted in this market',result:'fail',detail:rule.conditions});return out;}
+ if(rule.kind==='evidence'){
+  const ing=(p.extracted?.ingredientsText||'').trim();
+  if(!ing)out.checks.push({label:'Confirmed ingredient list',result:'missing',detail:'No confirmed ingredient list.',missing:['ingredient list']});
+  else{const hits=sugarHits(ing);out.checks.push({label:'Ingredient list screened for added-sugar ingredients',result:hits.length?'fail':'pass',detail:hits.length?'Found: '+hits.join(', '):'No added-sugar terms in the confirmed ingredient list. This screen is not proof on its own; it cannot see inside sub-ingredients that aren\'t listed.',source:'Confirmed ingredient list'});}
+ } else if(rule.kind==='comparative'){
+  const ref=p.reference;
+  for(const c of rule.checks){const pr=nv(p,c.nutrient,'per100'),rv=num(ref?.per100?.[c.nutrient]);
+   if(!ref||!ref.name||rv===null||pr===null){out.checks.push({label:c.label,result:'missing',detail:'Needs a verified comparison (reference) product with its '+NUT[c.nutrient].label.replace('– ','')+' '+per100Label(p)+', plus the product value.',missing:['verified reference product']});continue;}
+   const red=(rv-pr)/rv*100;out.checks.push({label:c.label,result:red>=c.minReductionPct?'pass':'fail',value:red,thr:c.minReductionPct,op:'>=',unit:'% reduction',formula:`Percentage reduction = (reference − product) ÷ reference × 100\n= (${fmt(rv)} − ${fmt(pr)}) ÷ ${fmt(rv)} × 100 = ${fmt(red,1)}% (reference: ${ref.name}${ref.source?', '+ref.source:''})`,head:(red-c.minReductionPct)/c.minReductionPct});}
+ } else { for(const c of rule.checks||[])out.checks.push(evalCheck(p,c)); }
+ for(const key of rule.requires||[]){const e=p.evidenceChecks?.[key];const ev=e?.evidenceId&&(p.evidence||[]).find(x=>x.id===e.evidenceId);
+   out.checks.push({label:EVID[key]?.label||key,result:e?.confirmed?'pass':'missing',detail:e?.confirmed?('Confirmed'+(e.note?': '+e.note:'')+(ev?` (evidence: ${ev.label})`:'')):('QA needs to '+(EVID[key]?.help||'confirm this.')),missing:e?.confirmed?null:[EVID[key]?.label||key]});}
+ const rs=out.checks.filter(c=>c.result!=='na');
+ if(rule.logic==='any'){out.status=rs.some(c=>c.result==='pass')?'meets':rs.some(c=>c.result==='missing')?'needs':'fails';}
+ else{out.status=rs.some(c=>c.result==='fail')?'fails':rs.some(c=>c.result==='missing')?'needs':'meets';}
+ if(rule.kind==='pctFatFree'&&out.status==='meets')out.checks.push({label:'Percentage by weight',result:'pass',formula:`100 − ${fmt(nv(p,'fat_total_g','per100'))} g fat ${per100Label(p)} = ${fmt(100-nv(p,'fat_total_g','per100'),1)}% fat free by weight → rounded down to ${out.wording}`});
+ if(rule.requiredWording)out.required.push(rule.requiredWording);
+ for(const ri of rule.requiredIf||[]){const r=evalCheck(p,ri);if(r.result==='pass')out.required.push(ri.text);else if(r.result==='missing')out.required.push(ri.text+' (may apply; value missing)');}
+ const heads=rs.filter(c=>c.result==='pass'&&typeof c.head==='number').map(c=>c.head);
+ out.head=heads.length?(rule.logic==='any'?Math.max(...heads):Math.min(...heads)):null;
+ if(out.status!=='meets')out.reasons=rs.filter(c=>c.result!=='pass').map(c=>c.detail||c.label);
+ const rel=(REL[p.categoryKind]||{})[rule.family]??3;out.rel=rel;
+ out.score=(rule.appeal||3)*10+rel*5+Math.max(0,Math.min(1,out.head??0.5))*10;
+ return out;}
+function marketInfo(code){const m=(S.markets?.list||[]).find(x=>x.code===code);return m||{code,name:code};}
+function evalMarket(p,code){const rs=S.rulesets[code];if(!rs)return {code,name:marketInfo(code).name,rs:null,verified:false,results:[]};
+ const results=(rs.rules||[]).map(r=>evalRule(r,p)).sort((a,b)=>b.score-a.score);return {code,name:marketInfo(code).name,rs,verified:rs.status==='verified',results};}
+function crossMarket(p,codes){
+ const ms=codes.map(c=>evalMarket(p,c)),groups={};
+ for(const m of ms)for(const r of m.results){const key=r.wording.toLowerCase();(groups[key]=groups[key]||{wording:r.wording,per:{},scores:[]});groups[key].per[m.code]=m.verified?r.status:'pending';groups[key][m.code]=r;if(r.status==='meets')groups[key].scores.push(r.score);}
+ const list=Object.values(groups).filter(g=>!g.wording.startsWith('__'));
+ for(const g of list){for(const m of ms){if(!g.per[m.code])g.per[m.code]=m.verified?'absent':'pending';}
+  g.meets=ms.filter(m=>g.per[m.code]==='meets').map(m=>m.code);g.fails=ms.filter(m=>['fails','absent'].includes(g.per[m.code])).map(m=>m.code);
+  g.needs=ms.filter(m=>g.per[m.code]==='needs').map(m=>m.code);g.pending=ms.filter(m=>g.per[m.code]==='pending').map(m=>m.code);
+  g.avg=g.scores.length?g.scores.reduce((a,b)=>a+b,0)/g.scores.length:0;}
+ const allVerified=ms.length>0&&ms.every(m=>m.verified);
+ const tops=allVerified?list.filter(g=>g.meets.length===ms.length).sort((a,b)=>b.avg-a.avg):[];
+ const best=tops.length?null:list.filter(g=>g.meets.length>0).sort((a,b)=>b.meets.length-a.meets.length||b.avg-a.avg)[0]||null;
+ return {ms,list,allVerified,top:tops[0]||null,runnerUp:tops[1]||null,best};}
+
+/* ---------- approvals ---------- */
+const apKey=(p,code,rule)=>`${p.id}__${code}__${rule.id}`;
+function approvalState(p,code,res){const a=S.approvals[apKey(p,code,res.rule)];if(!a||a.status!=='approved')return null;const rs=S.rulesets[code];const why=[];
+ if(a.dataHash!==dataHash(p))why.push('pack data or evidence changed');if(a.rulesetVersion!==rs?.version)why.push(`rules changed (v${a.rulesetVersion} → v${rs?.version})`);
+ if(a.wording!==res.wording)why.push('wording changed');if(a.sku!==p.sku||a.packVersion!==p.packVersion)why.push('SKU or pack version changed');if(res.status!=='meets')why.push('claim no longer meets checked rules');
+ return {a,current:!why.length,why};}
+
+/* ---------- persistence ---------- */
+const saveQ={};
+async function saveProduct(p){p.updatedAt=now();S.products[p.id]=p;render();if(!S.db)return;
+ if(saveQ[p.id]){saveQ[p.id].next=clone(p);return;}saveQ[p.id]={next:null};let body=clone(p);
+ while(body){try{const {id,...rest}=body;await S.db.doc('products/'+p.id).set(rest);}catch(e){toast(e.code==='invalid_argument'?'You can view this product but not change it.':'Could not save: '+(e.message||e.code));}
+  body=saveQ[p.id].next;saveQ[p.id].next=null;}delete saveQ[p.id];}
+function touch(p,unconfirm=true){if(unconfirm&&p.confirmed){p.confirmed=false;p.unconfirmedNote='Values changed after confirmation. Confirm again before running checks.';}saveProduct(p);}
+
+/* ---------- render ---------- */
+function render(){
+ const ae=document.activeElement,keep=ae&&ae.id&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName)?{id:ae.id,v:ae.value,s:ae.selectionStart,e:ae.selectionEnd}:null;
+ document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current',b.dataset.v===({product:'products',result:'quick',breakdown:'quick'}[S.view]||S.view)?'page':'false'));
+ let h='';
+ const nv0=document.querySelector('nav.tabs');if(nv0){nv0.classList.toggle('open',!!S.more);$('#moreBtn').setAttribute('aria-expanded',String(!!S.more));}
+ const wb=$('#whoBtn');if(wb)wb.textContent=(S.me.id||'Set your name')+(S.role==='qa'?' · QA':'');
+ if(S.dbMissing)h+=`<div class="banner warn" style="margin-bottom:14px"><b>This browser can't save PackPick data.</b> It may be in private mode or have site storage turned off. Open PackPick in a normal browser window.</div>`;
+ h+=({products:vProducts,product:vProduct,markets:vMarkets,rules:vRules,guide:vGuide,data:vData,settings:vSettings,quick:vQuick,result:vResult,breakdown:vBreakdown}[S.view]||vQuick)();
+ $('#main').innerHTML=h;
+ if(keep){const el=document.getElementById(keep.id);if(el){el.focus();if('value' in el&&el.value!==keep.v&&el.type!=='file')el.value=keep.v;try{el.setSelectionRange(keep.s,keep.e)}catch(e){}}}}
+function loadingOr(k,html){return S.loaded[k]||S.dbMissing?html:`<p class="muted">Loading…</p>`;}
+
+function vProducts(){
+ const ps=Object.values(S.products).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+ return `<div class="stack">
+ <div class="spread"><div><h1>Products</h1><p class="muted small" style="margin:4px 0 0">Scan a pack, check the details, see which front-of-pack nutrition claims it supports.</p></div>
+ <div class="row"><button data-act="newSample">Start SAMPLE demo</button><button class="primary" data-act="newProduct">Add product</button></div></div>
+ ${loadingOr('p',ps.length?`<div class="plist">${ps.map(p=>{const aps=Object.values(S.approvals).filter(a=>a.productId===p.id&&a.status==='approved').length;
+  return `<button class="panel pcard" data-act="open" data-id="${p.id}"><div class="spread"><span class="label">${esc(p.brand||p.company||'No brand')}</span>${p.sample?'<span class="chip sample">SAMPLE DATA</span>':''}</div>
+  <h3>${esc(p.name||'Untitled product')}</h3><div class="small muted mono">SKU ${esc(p.sku||'—')} · Pack ${esc(p.packVersion||'—')}</div>
+  <div class="row small">${p.confirmed?chip('meets','Values confirmed'):chip('needs','Values not confirmed')}<span class="muted">${(p.markets||[]).length} market${(p.markets||[]).length===1?'':'s'}</span><span class="muted">${aps} approved claim${aps===1?'':'s'}</span></div></button>`}).join('')}</div>`
+  :`<div class="panel"><h3>No products yet</h3><p class="muted">Add a product to start, or run the SAMPLE demo with an invented rice crispbread. Sample results are always labelled and can never be approved.</p></div>`)}
+ </div>`;}
+
+const STEPS=[['details','Details'],['capture','Scan pack'],['review','Check values'],['evidence','Evidence'],['markets','Markets'],['claims','Claims'],['handoff','QA handoff']];
+function stepDone(p,s){return {details:!!(p.name&&p.sku),capture:(p.captures||[]).length>0,review:!!p.confirmed,evidence:(p.evidence||[]).length>0||Object.values(p.evidenceChecks||{}).some(e=>e.confirmed),markets:(p.markets||[]).length>0,claims:false,handoff:false}[s];}
+function vProduct(){
+ const p=P();if(!p)return `<div class="panel">Product not found. <button data-act="nav" data-v="products">Back to products</button></div>`;
+ return `<div class="stack">
+ <div class="spread"><div><button class="ghost" data-act="nav" data-v="products">← Products</button></div>${p.sample?'<span class="chip sample">SAMPLE DATA: NOT A REAL PACK</span>':''}</div>
+ <div><span class="label">${esc(p.brand||'')}</span><h1>${esc(p.name||'Untitled product')}</h1><div class="small muted mono">SKU ${esc(p.sku||'—')} · Pack ${esc(p.packVersion||'—')}</div></div>
+ <div class="steps" role="tablist">${STEPS.map(([k,l])=>`<button data-act="step" data-s="${k}" class="${stepDone(p,k)?'done':''}" aria-current="${S.step===k?'step':'false'}">${l}</button>`).join('')}</div>
+ ${p.sample?`<div class="banner sample-b small"><b>SAMPLE DATA.</b> These values are invented for the demo and don't describe any real product. Sample results are never approved claims.</div>`:''}
+ ${({details:sDetails,capture:sCapture,review:sReview,evidence:sEvidence,markets:sMarkets,claims:sClaims,handoff:sHandoff}[S.step])(p)}
+ </div>`;}
+
+function sDetails(p){const f=(id,l,v,t='text')=>`<label class="fld">${l}<input id="d-${id}" data-f="det" data-k="${id}" type="${t}" value="${esc(v??'')}"></label>`;
+ return `<div class="panel stack"><h2>Product record</h2><div class="grid2">${f('company','Company',p.company)}${f('brand','Brand',p.brand)}${f('name','Product name',p.name)}${f('sku','SKU',p.sku)}${f('packVersion','Pack version',p.packVersion)}
+ <label class="fld">Product category<select id="d-categoryKind" data-f="det" data-k="categoryKind">${Object.entries(CATS).map(([k,v])=>`<option value="${k}" ${p.categoryKind===k?'selected':''}>${v[0].toUpperCase()+v.slice(1)}</option>`).join('')}</select></label>
+ <label class="fld">Physical form (picks solid or liquid thresholds)<select id="d-physical" data-f="det" data-k="physical"><option value="solid" ${p.physical!=='liquid'?'selected':''}>Solid (per 100 g)</option><option value="liquid" ${p.physical==='liquid'?'selected':''}>Liquid (per 100 mL)</option></select></label>
+ <label class="fld">US RACC in grams (21 CFR 101.12; only for US checks)<input id="d-usRaccG" data-f="det" data-k="usRaccG" type="number" inputmode="decimal" class="num" value="${esc(p.usRaccG??'')}" placeholder="QA to confirm"></label></div>
+ <div class="row"><button class="primary" data-act="step" data-s="capture">Next: scan pack</button><span class="spread" style="margin-left:auto"><button class="ghost" data-act="delProduct">Delete product…</button></span></div>
+ ${S.confirmDel?`<div class="banner warn row"><span>Delete this product record and its draft results? Approvals stay in the audit log.</span><button data-act="delYes">Delete</button><button data-act="delNo">Keep</button></div>`:''}</div>`;}
+
+function capThumbs(p,kind){const cs=(p.captures||[]).filter(c=>c.kind===kind);if(!cs.length)return `<p class="small muted">Nothing captured yet.</p>`;
+ return `<div class="thumbs">${cs.map(c=>c.method==='text'?`<div style="flex:1 1 100%"><div class="spread"><span class="small muted">Pasted text</span><button class="ghost small" data-act="rmCap" data-id="${c.id}">Remove</button></div><div class="textcap">${esc(c.text)}</div></div>`
+  :`<div class="thumb">${capSrc(c)?`<img src="${esc(capSrc(c))}" alt="${kind} capture">`:'<span class="small muted" style="padding:6px;display:block">Image not stored</span>'}<span class="tag">${esc(c.method)}</span><button class="x" data-act="rmCap" data-id="${c.id}" aria-label="Remove">×</button></div>`).join('')}</div>`;}
+function capSrc(c){if(c.method==='sample')return svgUrl(c.kind==='nip'?sampleNipSvg():sampleIngSvg());if(S.mem[c.id]?.url)return S.mem[c.id].url;if(c.assetId)return blobSrc(c.assetId);return null;}
+function sCapture(p){const zone=(kind,title,hint)=>`<div class="panel stack"><div><h3>${title}</h3><p class="small muted" style="margin:2px 0 0">${hint}</p></div>
+ <div class="row"><button data-act="cam" data-kind="${kind}">Take a photo</button><button data-act="upload" data-kind="${kind}">Upload image</button><button data-act="pasteHint" data-kind="${kind}">Paste image</button><button data-act="textCap" data-kind="${kind}">Paste text</button></div>
+ ${S.textKind===kind?`<label class="fld">Paste the ${kind==='nip'?'NIP':'ingredients'} text exactly as printed<textarea id="t-${kind}"></textarea></label><div class="row"><button class="primary" data-act="saveText" data-kind="${kind}">Add text</button><button class="ghost" data-act="cancelText">Cancel</button></div>`:''}
+ ${S.pasteKind===kind?`<p class="small banner">Copy an image, then press Ctrl+V (or long-press → Paste on a phone) anywhere on this page.</p>`:''}
+ ${capThumbs(p,kind)}</div>`;
+ const n=(p.captures||[]).length;
+ return `<div class="stack"><p class="muted small" style="margin:0">Capture the Nutrition Information Panel and the ingredient list separately if they're on different sides of the pack. You can mix photos, uploads and pasted text.</p>
+ ${p.sample?`<div class="banner sample-b row"><span><b>Demo:</b> on a phone, photograph the NIP and ingredients separately, or use the SAMPLE pack images.</span><button data-act="sampleImgs">Use SAMPLE pack images</button></div>`:''}
+ <div class="capzones">${zone('nip','Nutrition Information Panel','Fill the frame, avoid glare, keep both columns in view.')}${zone('ingredients','Ingredients','Include the full list with every sub-ingredient in brackets.')}</div>
+ <div class="panel row"><button class="primary" data-act="extract" ${n&&!S.busy?'':'disabled'}>${S.busy==='extract'?'Reading the pack…':'Read pack details'}</button>
+ ${S.busy==='extract'?`<span class="small">${esc(S.ocrStep||'')}</span><div class="progress"><i style="width:0%"></i></div>`:`<span class="small muted">Photos are read on this device. Nothing is uploaded. You check every value next.</span>`}${S.err?`<span class="small" style="color:var(--fails)">${esc(S.err)}</span>`:''}
+ <button class="ghost" data-act="step" data-s="review">Enter values by hand</button></div></div>`;}
+
+function nipRows(p){const x=p.extracted,lab=per100Label(p);return NUTS.map(({k,label,unit})=>{const n=x.nutrients[k]||{unit,perServing:null,per100:null};const f=n.flag;
+  const fl=f?`<div class="flagline">${chip(f.status==='open'?'needs':f.status==='corrected'?'meets':'draft',{blurry:'Blurry',missing:'Missing',conflict:'Conflict'}[f.type]+(f.status==='open'?'':f.status==='corrected'?' · corrected':' · checked'))}<span class="muted">${esc(f.note)}</span>${f.orig?`<span class="muted mono">Read as: ${esc(f.orig)}</span>`:''}
+   ${f.status==='open'?`<button class="small" data-act="ack" data-k="${k}">${f.type==='missing'?'Not on pack: keep missing':'Matches pack: keep'}</button>`:''}</div>`:'';
+  return `<tr class="${f?.status==='open'?'flag-open':''}"><td>${label}${fl}</td><td class="n"><input id="n-${k}-ps" class="num" inputmode="decimal" data-f="nut" data-k="${k}" data-c="perServing" value="${esc(n.perServing??'')}" placeholder="missing" aria-label="${label} per serving"></td>
+  <td class="n"><input id="n-${k}-p100" class="num" inputmode="decimal" data-f="nut" data-k="${k}" data-c="per100" value="${esc(n.per100??'')}" placeholder="missing" aria-label="${label} ${lab}"></td>
+  <td><select id="n-${k}-u" data-f="nut" data-k="${k}" data-c="unit" aria-label="${label} unit">${UNIT_OPTS[unit].map(u=>`<option ${n.unit===u?'selected':''}>${u}</option>`).join('')}</select></td></tr>`;}).join('');}
+function sReview(p){
+ if(!p.extracted)p.extracted={servingSize:{value:null,unit:'g'},servingsPerPack:'',nutrients:{},ingredientsText:'',warnings:[],source:'Entered by hand'};
+ const x=p.extracted,lab=per100Label(p),open=openFlags(p);
+ const caps=(p.captures||[]);
+ const rows=nipRows(p);
+ return `<div class="review">
+ <div class="src panel stack"><h3>Original</h3>${caps.length?caps.map(c=>`<div class="stack" style="gap:4px"><span class="label">${c.kind==='nip'?'NIP':'Ingredients'} · ${esc(c.method)}</span>${c.method==='text'?`<div class="textcap">${esc(c.text)}</div>`:capSrc(c)?`<img src="${esc(capSrc(c))}" alt="Original ${c.kind}">`:'<p class="small muted">Image not stored in this view.</p>'}</div>`).join(''):'<p class="muted small">No captures. Values are entered by hand.</p>'}
+ ${x.transcript?`<details><summary>Text read from the photos</summary><div class="textcap">${esc(x.transcript)}</div></details>`:''}</div>
+ <div class="stack">
+ <div class="panel stack"><div class="spread"><h2>Check the details</h2><span class="small muted">${esc(x.source||'')}</span></div>
+ ${(x.warnings||[]).map(w=>`<div class="banner warn small">${esc(w)}</div>`).join('')}
+ <div class="grid3"><label class="fld">Serving size<input id="x-ss" class="num" inputmode="decimal" data-f="ss" value="${esc(x.servingSize?.value??'')}" placeholder="missing"></label>
+ <label class="fld">Serving unit<select id="x-ssu" data-f="ssu"><option ${x.servingSize?.unit!=='mL'?'selected':''}>g</option><option ${x.servingSize?.unit==='mL'?'selected':''}>mL</option></select></label>
+ <label class="fld">Servings per pack<input id="x-spp" data-f="spp" value="${esc(x.servingsPerPack??'')}"></label></div>
+ <div class="tablewrap"><table class="nip"><thead><tr><th>Nutrient</th><th class="n">Per serving</th><th class="n">${lab}</th><th>Unit</th></tr></thead><tbody>${rows}</tbody></table></div>
+ <p class="small muted" style="margin:0">Blank means missing. PackPick never treats a missing value as zero. Type 0 only when the pack prints 0.</p></div>
+ <div class="panel stack"><h3>Ingredients</h3><label class="fld">Exactly as printed, with sub-ingredients in brackets<textarea id="x-ing" data-f="ing">${esc(x.ingredientsText||'')}</textarea></label>
+ ${x.ingredientsText?`<div class="small"><span class="label">Parsed</span><ul style="margin:4px 0 0;padding-left:18px">${parseIng(x.ingredientsText).map(i=>`<li>${esc(i.name)}${i.sub.length?` <span class="muted">→ ${i.sub.map(esc).join(', ')}</span>`:''}</li>`).join('')}</ul></div>`:''}</div>
+ <div class="panel stack">${p.confirmed?`<div class="row">${chip('meets','Values confirmed')}<span class="small muted">by ${esc(nameOf(p.confirmedBy))}, ${day(p.confirmedAt)}</span></div><button class="primary" data-act="step" data-s="evidence">Next: evidence</button>`
+  :`${p.unconfirmedNote?`<div class="banner warn small">${esc(p.unconfirmedNote)}</div>`:''}${open.length?`<div class="banner warn small"><b>${open.length} flagged reading${open.length>1?'s':''}</b> to correct or check: ${open.map(n=>n.label.replace('– ','')).join(', ')}.</div>`:''}
+  <label class="row small"><input type="checkbox" id="x-chk" style="width:auto" ${S.chk?'checked':''} data-f="chk"> I've checked every value and unit against the pack.</label>
+  <button class="primary" data-act="confirm" ${open.length||!S.chk?'disabled':''}>Confirm values</button><span class="small muted">Claim checks only run on confirmed values.</span>`}</div>
+ </div></div>`;}
+function parseIng(t){const out=[];let d=0,cur='';for(const ch of t.replace(/\.$/,'')){if(ch==='('||ch==='[')d++;if(ch===')'||ch===']')d--;if(ch===','&&d===0){out.push(cur);cur='';}else cur+=ch;}if(cur.trim())out.push(cur);
+ return out.map(s=>{s=s.trim();const m=s.match(/^(.*?)\s*[\(\[](.*)[\)\]]\s*$/);if(!m)return {name:s,sub:[]};const sub=m[2].split(',').map(x=>x.trim()).filter(x=>x&&!/^\d+(\.\d+)?\s*%$/.test(x)&&!/^\d{3,4}[a-z]?$/i.test(x));return {name:s,sub:sub};});}
+
+function sEvidence(p){const ev=p.evidence||[];const ec=p.evidenceChecks||{};
+ return `<div class="stack"><div class="panel stack"><h2>Supporting evidence</h2><p class="small muted" style="margin:0">Attach formulation details, product specifications or lab results. Claims like "No added sugar" and comparative claims can't be decided from the NIP alone.</p>
+ ${ev.length?`<div class="tablewrap"><table><thead><tr><th>Type</th><th>Label</th><th>Note</th><th>Added</th></tr></thead><tbody>${ev.map(e=>`<tr><td>${esc(e.type)}</td><td>${e.assetId&&blobSrc(e.assetId)?`<a href="${esc(blobSrc(e.assetId))}" target="_blank" rel="noopener" download="${esc(e.fileName||e.label)}">${esc(e.label)}</a>`:esc(e.label)}</td><td class="small">${esc(e.note||'')}</td><td class="small muted">${day(e.at)} · ${esc(nameOf(e.by))}</td></tr>`).join('')}</tbody></table></div>`:'<p class="small muted">No evidence attached yet.</p>'}
+ <div class="grid3"><label class="fld">Type<select id="e-type"><option>Formulation</option><option>Specification</option><option>Lab result</option><option>Supplier declaration</option><option>Other</option></select></label>
+ <label class="fld">Label<input id="e-label" placeholder="e.g. Formulation F-123 rev 4"></label><label class="fld">Note<input id="e-note" placeholder="What it shows"></label></div>
+ <div class="row"><button data-act="addEv">Add evidence note</button><button data-act="addEvFile">Attach a file and add</button></div></div>
+ <div class="panel stack"><h3>Evidence checks</h3>${Object.entries(EVID).map(([k,e])=>`<div class="stack" style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
+  <label class="row"><input type="checkbox" style="width:auto" data-f="evc" data-k="${k}" id="ec-${k}" ${ec[k]?.confirmed?'checked':''}> <span>${esc(e.label)}</span></label>
+  <div class="grid2"><label class="fld">Supporting evidence<select id="ecs-${k}" data-f="evcs" data-k="${k}"><option value="">Choose…</option>${ev.map(x=>`<option value="${x.id}" ${ec[k]?.evidenceId===x.id?'selected':''}>${esc(x.label)}</option>`).join('')}</select></label>
+  <label class="fld">Note<input id="ecn-${k}" data-f="evcn" data-k="${k}" value="${esc(ec[k]?.note||'')}"></label></div>
+  ${ec[k]?.confirmed?`<span class="small muted">Confirmed by ${esc(nameOf(ec[k].by))}, ${day(ec[k].at)}</span>`:''}</div>`).join('')}</div>
+ <div class="panel stack"><h3>Comparison product (for reduced and light claims)</h3><p class="small muted" style="margin:0">Needed for "Reduced fat", "Lite" and other comparative claims. Use a verified reference food.</p>
+ <div class="grid2"><label class="fld">Reference product<input id="r-name" data-f="ref" data-k="name" value="${esc(p.reference?.name||'')}"></label><label class="fld">Source of reference values<input id="r-source" data-f="ref" data-k="source" value="${esc(p.reference?.source||'')}"></label></div>
+ <div class="grid3">${['energy_kj','fat_total_g','sugars_g','sodium_mg'].map(k=>`<label class="fld">${NUT[k].label.replace('– ','')} ${per100Label(p)} (${NUT[k].unit})<input id="r-${k}" class="num" inputmode="decimal" data-f="refv" data-k="${k}" value="${esc(p.reference?.per100?.[k]??'')}"></label>`).join('')}</div></div>
+ <div class="row"><button class="primary" data-act="step" data-s="markets">Next: markets</button></div></div>`;}
+
+function rsDot(code){const rs=S.rulesets[code];return rs?(rs.status==='verified'?'v':'d'):'';}
+function rsStatusText(code){const rs=S.rulesets[code];return rs?(rs.status==='verified'?`Verified v${rs.version}`:`Draft v${rs.version}: QA to verify`):'Market rules pending';}
+function sMarkets(p){const list=S.markets?.list||[];const sel=new Set(p.markets||[]);
+ return `<div class="panel stack"><div class="spread"><h2>Destination markets</h2><span class="small muted">${sel.size} selected</span></div>
+ <p class="small muted" style="margin:0">Each market is checked against its own official rules. PackPick never falls back to FSANZ for another market. <span class="dot v"></span> verified &nbsp;<span class="dot d"></span> draft &nbsp;<span class="dot"></span> pending</p>
+ <div class="row"><button data-act="mset" data-set="AU">Australia only</button><button data-act="mset" data-set="AU,NZ">AU + NZ</button><button data-act="mset" data-set="verified">All verified</button><button data-act="mset" data-set="">Clear</button></div>
+ ${loadingOr('m',`<div class="mchips">${list.map(m=>`<button class="mchip" data-act="mtog" data-code="${m.code}" aria-pressed="${sel.has(m.code)}" title="${esc(rsStatusText(m.code))}"><span class="dot ${rsDot(m.code)}"></span>${esc(m.name)}</button>`).join('')}</div>`)}
+ <div class="row"><button class="primary" data-act="step" data-s="claims" ${sel.size?'':'disabled'}>See claims</button></div></div>`;}
+
+function statusFor(m,r){return m.verified?r.status:'pending';}
+function checksTable(r,p){return `<div class="tablewrap"><table><thead><tr><th>Condition</th><th class="n">Product</th><th class="n">Rule</th><th>Result</th></tr></thead><tbody>${r.checks.map(c=>`<tr><td>${esc(c.label)}${c.basis?`<div class="small muted">${BASIS[c.basis]==='per 100 g'?per100Label(p):BASIS[c.basis]}</div>`:''}${c.formula?`<div class="calc">${esc(c.formula)}</div>`:''}${c.detail?`<div class="small muted">${esc(c.detail)}</div>`:''}</td>
+ <td class="n mono">${c.value!=null?fmt(c.value)+' '+esc(c.unit||''):'—'}</td><td class="n mono">${c.thr!=null?esc(c.op==='<='?'≤ ':'≥ ')+fmt(c.thr)+' '+esc(c.unit||''):'—'}</td>
+ <td>${chip({pass:'meets',fail:'fails',missing:'needs',na:'draft'}[c.result],{pass:'Pass',fail:'Miss',missing:'Needs evidence',na:'N/A'}[c.result])}</td></tr>`).join('')}</tbody></table></div>`;}
+function inputsList(r,p){const ins=[];r.checks.forEach(c=>(c.inputs||[]).forEach(i=>{const k=i.label+i.col;if(!ins.find(x=>x.k===k))ins.push({...i,k});}));
+ return ins.length?`<p class="small" style="margin:6px 0"><span class="label">Confirmed product values</span><br>${ins.map(i=>`${esc(i.label)} <span class="mono">${fmt(i.value)} ${esc(i.unit)}</span> <span class="muted">(${esc(i.col)})</span>`).join(' · ')}<br><span class="muted">Source: ${esc(p.extracted?.source||'')}; confirmed by ${esc(nameOf(p.confirmedBy))}, ${day(p.confirmedAt)}</span></p>`:'';}
+function whyBlock(r,m,p){const rl=r.rule,rs=m.rs;return `<details><summary>Why this ${r.status==='meets'?'qualifies':'doesn\'t qualify yet'}</summary><div class="stack" style="gap:8px;padding-bottom:10px">
+ ${inputsList(r,p)}${checksTable(r,p)}
+ ${rl.conditions?`<p class="small" style="margin:0"><span class="label">Rule conditions</span><br>${esc(rl.conditions)}</p>`:''}
+ ${r.required.length?`<p class="small" style="margin:0"><span class="label">Required qualifier or accompanying wording</span><br>${r.required.map(esc).join('<br>')}</p>`:''}
+ <p class="small muted" style="margin:0">${esc(rl.source||'')}${rl.clause?' · '+esc(rl.clause):''}${rl.effectiveDate?' · effective '+esc(rl.effectiveDate):''}${rl.category?' · applies to: '+esc(rl.category):''} · rule set ${esc(rs?.code)} v${esc(rs?.version)} (${esc(rs?.status)})${rl.url?` · <a href="${esc(rl.url)}" target="_blank" rel="noopener">Official source</a>`:''}</p></div></details>`;}
+function whyText(r,p){const c=r.checks.filter(x=>x.result==='pass'&&x.thr!=null).sort((a,b)=>(a.head??9)-(b.head??9))[0];let t='';
+ if(c)t+=`${fmt(c.value)} ${c.unit} ${c.basis?(c.basis==='per100'?per100Label(p):BASIS[c.basis]):''} against a limit of ${c.op==='<='?'≤':'≥'} ${fmt(c.thr)} ${c.unit}, ${Math.round((c.head||0)*100)}% inside the limit. `;
+ else if(r.rule.kind==='evidence')t+='Formulation evidence confirms no added sugars, and the ingredient list shows none. ';
+ const fam=FAMLABEL[r.rule.family]||'this nutrient',cat=CATS[p.categoryKind]||'food';
+ t+=r.rel>=4?`A relevant, credible callout for a ${cat}.`:r.rel===3?'A useful supporting callout.':`Less distinctive for a ${cat}: shoppers rarely expect much ${fam} here.`;
+ if(c&&c.head<0.15)t+=' Tight margin: check batch-to-batch variation before committing.';return t;}
+function copyBtn(w){return `<button class="small" data-act="copy" data-w="${esc(w)}">Copy</button>`;}
+function claimCard(r,m,p,i){const st=statusFor(m,r);const ap=approvalState(p,m.code,r);
+ return `<div class="claim"><div class="stack" style="gap:6px"><span class="rank">#${i+1} · ${esc(m.name)}</span><div class="w"><b>${esc(r.wording)}</b></div>
+ <div class="row">${chip(st)}${ap?(ap.current?chip('meets','QA approved'):chip('needs','Needs re-review')):chip('draft','Draft, not approved')}${copyBtn(r.wording)}</div>
+ ${ap?`<span class="small muted">Approved by ${esc(nameOf(ap.a.reviewerId))}, ${day(ap.a.at)}${ap.current?'':' · '+esc(ap.why.join('; '))}</span>`:''}</div>
+ <div class="stack" style="gap:8px"><div><span class="label">Why it's a good callout</span><p style="margin:2px 0 0">${esc(whyText(r,p))}</p></div>${r.required.length?`<p class="small" style="margin:0"><b>Must appear with:</b> ${r.required.map(esc).join('; ')}</p>`:''}
+ ${whyBlock(r,m,p)}${approveUi(p,m,r,ap)}</div></div>`;}
+function approveUi(p,m,r,ap){if(!S.canEdit)return '';if(p.sample)return `<p class="small muted" style="margin:0">SAMPLE data can't be approved.</p>`;
+ if(!p.confirmed||!m.verified||r.status!=='meets')return '';if(ap&&ap.current)return `<button class="small ghost" data-act="revoke" data-code="${m.code}" data-rid="${r.rule.id}">Withdraw approval</button>`;
+ const key=m.code+'|'+r.rule.id;if(S.approving===key)return `<div class="banner stack" style="gap:8px"><b>Approve “${esc(r.wording)}” for SKU ${esc(p.sku)}, pack ${esc(p.packVersion)}, ${esc(m.name)}?</b><span class="small">I have checked the latest official rules, product data, calculations, exact wording and qualifiers.</span><label class="fld">Note for the record<input id="ap-note"></label><div class="row"><button class="primary" data-act="approveYes" data-code="${m.code}" data-rid="${r.rule.id}">Approve wording</button><button data-act="approveNo">Cancel</button></div></div>`;
+ return `<button class="small" data-act="approve" data-code="${m.code}" data-rid="${r.rule.id}">${ap?'Re-review and approve':'QA: approve this wording'}</button>`;}
+
+function covBlock(g,cm){const nm=c=>esc(marketInfo(c).name);const reason=c=>{const r=g[c];if(g.per[c]==='absent')return 'no rule for this wording in the verified set';return r?esc((r.reasons[0]||'').slice(0,140)):'';};
+ return `<div class="cov"><div><span class="label">Qualifies (${g.meets.length})</span><div class="small">${g.meets.map(nm).join(', ')||'—'}</div></div>
+ <div><span class="label">Fails (${g.fails.length})</span><div class="small">${g.fails.map(c=>`${nm(c)}<div class="muted">${reason(c)}</div>`).join('')||'—'}</div></div>
+ <div><span class="label">Awaiting rules or evidence (${g.pending.length+g.needs.length})</span><div class="small">${g.pending.map(c=>`${nm(c)} <span class="muted">· market rules pending</span>`).concat(g.needs.map(c=>`${nm(c)} <span class="muted">· needs evidence: ${reason(c)}</span>`)).join('<br>')||'—'}</div></div></div>`;}
+function sClaims(p){return sClaimsBody(p)+`<div class="row"><button class="primary" data-act="step" data-s="handoff">Next: QA handoff</button></div>`;}
+function sClaimsBody(p){
+ const pre=p.confirmed?'':`<div class="banner warn small"><b>Preview.</b> These numbers haven't been confirmed against the pack yet. Claims that use highlighted numbers are held back.</div>`;
+ const codes=p.markets||[];if(!codes.length)return `<div class="panel">Pick at least one market. <button data-act="step" data-s="markets">Choose markets</button></div>`;
+ const cm=crossMarket(p,codes);const n=codes.length;let h='';
+ const lite=/\b(lite|light)\b/i.test(p.name||'');
+ if(lite)h+=`<div class="banner warn small"><b>The product name uses “${esc((p.name.match(/\b(lite|light)\b/i)||[''])[0])}”.</b> In AU/NZ, the UK and the US, “light/lite” about a nutrient or energy is a comparative claim that needs a reference food, and if it describes something else (for example texture) the label must say so. QA to check how the name is presented in each market.</div>`;
+ if(cm.top){const g=cm.top,r0=g[codes[0]];h+=`<div class="panel hero stack"><span class="label">Overall Top Pick · all ${n} selected market${n>1?'s':''} verified</span><div class="row"><span class="wording">${esc(g.wording)}</span>${copyBtn(g.wording)}${chip('draft','Draft until QA approves')}</div>
+  <p style="margin:0">Meets checked rules in every selected market (${g.meets.map(c=>esc(marketInfo(c).name)).join(', ')}). ${esc(whyText(r0,p))}${cm.runnerUp?` It ranks above “${esc(cm.runnerUp.wording)}” (score ${fmt(g.avg,0)} vs ${fmt(cm.runnerUp.avg,0)}) on shopper appeal, relevance to a ${esc(CATS[p.categoryKind])} and headroom against the limits.`:''}</p>${aiBlock(p,cm,g)}</div>`;}
+ else if(cm.best){const g=cm.best;h+=`<div class="panel hero best stack"><span class="label">Best coverage · no verified claim works in every selected market</span><div class="row"><span class="wording">${esc(g.wording)}</span>${copyBtn(g.wording)}${chip('draft','Draft until QA approves')}</div>
+  <p style="margin:0"><b>Qualifies in ${g.meets.length} of ${n} selected markets.</b> ${cm.allVerified?'':'An Overall Top Pick needs verified rules for every selected market.'}</p>${covBlock(g,cm)}${aiBlock(p,cm,g)}</div>`;}
+ else h+=`<div class="panel hero best"><span class="label">No qualifying claim</span><p style="margin:4px 0 0">${cm.ms.some(m=>m.verified)?'No nutrition claim meets the checked rules in any selected market, so PackPick isn\'t suggesting wording.':'None of the selected markets has verified rules yet, so PackPick can\'t suggest wording. QA can verify rule sets on the Rules tab.'}</p></div>`;
+ h+=cm.ms.map(m=>{const meets=m.results.filter(r=>r.status==='meets'),needs=m.results.filter(r=>r.status==='needs'),fails=m.results.filter(r=>r.status==='fails');
+  const head=`<div class="spread"><h2>${esc(m.name)}</h2>${m.rs?(m.verified?chip('meets',`Rules verified v${m.rs.version}`):chip('pending','Market rules pending')):chip('pending','Market rules pending')}</div>`;
+  if(!m.rs)return `<div class="panel stack">${head}<p class="muted small" style="margin:0">No rule set for ${esc(m.name)} yet. QA adds and verifies it on the Rules tab.</p></div>`;
+  const short=meets.slice(0,5);
+  return `<div class="panel stack">${head}${m.verified?'':`<div class="banner small">Draft rule set, not verified by QA. The preview below is calculated from the draft and can't be used. Statuses show as Market rules pending.</div>`}
+  ${short.length?`<div><span class="label">${m.verified?'Shortlist':'Draft preview'}: ${short.length} eligible claim${short.length>1?'s':''}, strongest first</span>${short.map((r,i)=>claimCard(r,m,p,i)).join('')}</div>`:`<p class="muted" style="margin:0">No claim meets the ${m.verified?'checked':'draft'} rules here.</p>`}
+  ${needs.length?`<details><summary>Needs evidence (${needs.length})</summary>${needs.map(r=>`<div class="rule"><div class="spread"><b>${esc(r.wording)}</b>${chip(statusFor(m,r))}</div><p class="small" style="margin:4px 0">${r.reasons.map(esc).join('<br>')}</p>${whyBlock(r,m,p)}</div>`).join('')}</details>`:''}
+  ${fails.length?`<details><summary>Does not meet rules (${fails.length})</summary>${fails.map(r=>`<div class="rule"><div class="spread"><b>${esc(r.wording)}</b>${chip(statusFor(m,r))}</div><p class="small" style="margin:4px 0">${r.reasons.map(esc).join('<br>')}</p>${whyBlock(r,m,p)}</div>`).join('')}</details>`:''}</div>`;}).join('');
+ return `<div class="stack">${pre}${h}</div>`;}
+function aiBlock(p,cm,g){return '';const k=p.id+'|'+g.wording;const a=S.ai[k];
+ return `<div class="stack" style="gap:6px">${a?`<div class="ai small"><span class="label">AI explanation · doesn't change any result</span><br>${esc(a)}</div>`:''}<div><button class="small" data-act="explain" data-w="${esc(g.wording)}" ${S.busy==='ai'?'disabled':''}>${S.busy==='ai'?'Writing…':'Explain for the packaging team (AI)'}</button></div></div>`;}
+
+function sHandoff(p){const codes=p.markets||[];if(!p.confirmed)return `<div class="panel">Confirm the values first.</div>`;
+ const cm=crossMarket(p,codes);const rows=[];cm.ms.forEach(m=>m.results.filter(r=>r.status==='meets'||r.status==='needs').forEach(r=>{const ap=approvalState(p,m.code,r);rows.push({m,r,ap});}));
+ return `<div class="stack"><div class="panel stack"><h2>QA sign-off status</h2><p class="small muted" style="margin:0">Every suggestion stays in draft until QA approves the exact wording for this SKU, pack version and market. Approvals are flagged for re-review when the formulation, pack data, wording or rules change.</p>
+ <div class="tablewrap"><table><thead><tr><th>Market</th><th>Wording</th><th>Check</th><th>Sign-off</th></tr></thead><tbody>${rows.map(({m,r,ap})=>`<tr><td>${esc(m.name)}</td><td><b>${esc(r.wording)}</b></td><td>${chip(statusFor(m,r))}</td><td>${p.sample?chip('draft','SAMPLE: not approvable'):ap?(ap.current?chip('meets','Approved')+`<div class="small muted">${esc(nameOf(ap.a.reviewerId))}, ${day(ap.a.at)}</div>`:chip('needs','Re-review')+`<div class="small muted">${esc(ap.why.join('; '))}</div>`):chip('draft','Draft')}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">No eligible or evidence-pending claims.</td></tr>'}</tbody></table></div></div>
+ <div class="panel stack"><h3>One-page QA summary</h3><p class="small muted" style="margin:0">SKU and pack version, proposed wording, market results and exceptions, key calculations, sources and sign-off status, as a printable HTML page.</p>
+ <div class="row"><button class="primary" data-act="download">Download QA summary</button><span class="small muted">Opens as a page you can print or save as PDF.</span></div></div></div>`;}
+
+/* ---------- QA summary document ---------- */
+function summaryHtml(p){const codes=p.markets||[];const cm=crossMarket(p,codes);const pick=cm.top||cm.best;
+ const e=esc,stc={meets:'#16703a',fails:'#a8261c',needs:'#8a5300',pending:'#4d5873',absent:'#a8261c'};
+ const claims=cm.list.filter(g=>g.meets.length||g.needs.length).sort((a,b)=>b.meets.length-a.meets.length||b.avg-a.avg).slice(0,8);
+ const calc=pick?cm.ms.map(m=>{const r=pick[m.code];if(!r)return '';return `<tr><td>${e(m.name)}</td><td>${r.checks.map(c=>`${e(c.label)}: ${c.value!=null?e(fmt(c.value)+' '+(c.unit||'')):'—'} vs ${c.thr!=null?e((c.op==='<='?'≤ ':'≥ ')+fmt(c.thr)+' '+(c.unit||'')):'—'} → ${e({pass:'pass',fail:'miss',missing:'needs evidence',na:'n/a'}[c.result])}${c.formula?'<br><span class=f>'+e(c.formula).replace(/\n/g,'<br>')+'</span>':''}`).join('<br>')}</td><td>${e(r.rule.source||'')} ${e(r.rule.clause||'')}<br>${e(m.rs?.code)} v${e(m.rs?.version)} (${e(m.rs?.status)})${r.rule.url?'<br>'+e(r.rule.url):''}</td></tr>`;}).join(''):'';
+ const signoff=cm.ms.map(m=>{if(!pick||!pick[m.code])return `<tr><td>${e(m.name)}</td><td colspan=2>—</td></tr>`;const ap=approvalState(p,m.code,pick[m.code]);return `<tr><td>${e(m.name)}</td><td>${p.sample?'SAMPLE: not approvable':ap?(ap.current?'Approved':'Needs re-review: '+e(ap.why.join('; '))):'Draft: not approved'}</td><td>${ap?e(nameOf(ap.a.reviewerId))+', '+e(day(ap.a.at))+', rules v'+e(ap.a.rulesetVersion):'—'}</td></tr>`;}).join('');
+ return `<!doctype html><html><head><meta charset="utf-8"><title>QA summary ${e(p.sku)}</title><style>@page{size:A4;margin:12mm}body{font:10.5px/1.35 Arial,Helvetica,sans-serif;color:#111;margin:0}h1{font-size:17px;margin:0}h2{font-size:12px;margin:10px 0 4px;text-transform:uppercase;letter-spacing:.05em}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:3px 5px;vertical-align:top;text-align:left}th{background:#eee}.f{font-family:Consolas,monospace;font-size:9.5px;color:#333}.s{background:#ffe45c;padding:4px 6px;font-weight:bold;margin:6px 0}.pick{font-size:16px;font-weight:bold}.disc{border-top:1px solid #999;margin-top:10px;padding-top:6px;font-size:9.5px}</style></head><body>
+ ${p.sample?'<div class=s>SAMPLE DATA: invented values for a demo. Not real pack information. Not an approved claim.</div>':''}
+ <h1>PackPick QA summary: ${e(p.name)}</h1><div>${e(p.company||'')} · Brand ${e(p.brand||'')} · <b>SKU ${e(p.sku)}</b> · <b>Pack ${e(p.packVersion)}</b> · Generated ${e(new Date().toLocaleString())}</div>
+ <div>Values confirmed by ${e(nameOf(p.confirmedBy))}, ${e(day(p.confirmedAt))} · Source: ${e(p.extracted?.source||'')} · Data fingerprint ${e(dataHash(p))}</div>
+ <h2>Proposed wording</h2>${pick?`<div class=pick>${e(pick.wording)}</div><div>${cm.top?`Overall Top Pick: meets checked rules in all ${codes.length} selected markets.`:`Best coverage: qualifies in ${pick.meets.length} of ${codes.length} selected markets. Fails: ${e(pick.fails.map(c=>marketInfo(c).name).join(', ')||'none')}. Awaiting rules or evidence: ${e(pick.pending.concat(pick.needs).map(c=>marketInfo(c).name).join(', ')||'none')}.`}</div>`:'<div>No claim qualifies in any selected market. No wording proposed.</div>'}
+ <h2>Market results</h2><table><tr><th>Wording</th>${cm.ms.map(m=>`<th>${e(m.name)}${m.verified?'':' (rules pending)'}</th>`).join('')}</tr>${claims.map(g=>`<tr><td><b>${e(g.wording)}</b></td>${cm.ms.map(m=>{const s=g.per[m.code];return `<td style="color:${stc[s]}">${e(s==='absent'?'No rule':STLABEL[s])}</td>`;}).join('')}</tr>`).join('')}</table>
+ <h2>Exceptions</h2><div>${[/\b(lite|light)\b/i.test(p.name||'')?'Product name uses "light/lite": comparative-claim conditions and characteristic wording to be checked in every market.':'',...cm.ms.filter(m=>!m.verified).map(m=>`${m.name}: market rules pending.`),...openFlags(p).map(n=>`Open flag on ${n.label}.`)].filter(Boolean).map(e).join('<br>')||'None.'}</div>
+ ${pick?`<h2>Key calculations for “${e(pick.wording)}”</h2><table><tr><th>Market</th><th>Calculation and threshold</th><th>Source</th></tr>${calc}</table>`:''}
+ <h2>Sign-off status</h2><table><tr><th>Market</th><th>Status</th><th>Reviewer, date, rules</th></tr>${signoff}</table>
+ <div class=disc><b>Internal guidance only, not regulatory approval.</b> Before using any claim, QA must independently check the latest official rules for each intended market and verify the product data, calculations, exact wording and any required qualifiers. Do not use a claim on packaging until QA signs off. Always double-check before printing.</div></body></html>`;}
+
+/* ---------- Markets & Rules views ---------- */
+function vMarkets(){const list=S.markets?.list||[];
+ return `<div class="stack"><div><h1>Markets</h1><p class="muted small" style="margin:4px 0 0">Rollout order for rule verification. ${S.canEdit?'QA can reorder, add or remove markets.':'Only QA editors can change this list.'}</p></div>
+ <div class="panel">${loadingOr('m',list.map((m,i)=>`<div class="mrow"><span class="order">${i+1}</span><span class="nm"><b>${esc(m.name)}</b> <span class="muted mono small">${esc(m.code)}</span></span>
+ ${S.rulesets[m.code]?(S.rulesets[m.code].status==='verified'?chip('meets',rsStatusText(m.code)):chip('needs',rsStatusText(m.code))):chip('pending','Market rules pending')}
+ ${S.canEdit?`<button class="small" data-act="mup" data-i="${i}" ${i?'':'disabled'} aria-label="Move up">↑</button><button class="small" data-act="mdown" data-i="${i}" ${i<list.length-1?'':'disabled'} aria-label="Move down">↓</button><button class="small ghost" data-act="mrm" data-i="${i}">Remove</button>`:''}</div>`).join('')||'<p class="muted">No markets configured.</p>')}
+ ${S.canEdit?`<div class="row" style="margin-top:12px"><input id="m-name" placeholder="Market name" style="max-width:220px"><input id="m-code" placeholder="Code, e.g. JP" style="max-width:140px"><button data-act="madd">Add market</button></div>`:''}</div></div>`;}
+function vRules(){const list=S.markets?.list||[];const code=S.rulesMarket;const rs=S.rulesets[code];
+ return `<div class="stack"><div><h1>Market rules</h1><p class="muted small" style="margin:4px 0 0">Versioned rule sets with official source, clause, effective date, product category, units, conditions and required wording. Eligibility is calculated from these rules only. ${S.canEdit?'':'Only QA editors can change rules.'}</p></div>
+ <label class="fld" style="max-width:320px">Market<select id="rm-sel" data-f="rmsel">${list.map(m=>`<option value="${m.code}" ${m.code===code?'selected':''}>${esc(m.name)} · ${esc(rsStatusText(m.code))}</option>`).join('')}</select></label>
+ ${loadingOr('r',rs?`<div class="panel stack"><div class="spread"><div><h2>${esc(rs.name||code)} rules · v${rs.version}</h2><div class="small muted">${esc(rs.authority||'')}</div></div>${rs.status==='verified'?chip('meets',`Verified by ${nameOf(rs.verifiedBy)}, ${day(rs.verifiedAt)}`):chip('needs','Draft: QA to verify')}</div>
+ ${rs.notes?`<p class="small" style="margin:0">${esc(rs.notes)}</p>`:''}
+ ${S.canEdit?`<div class="row">${rs.status!=='verified'?(S.verifying===code?`<div class="banner stack" style="gap:8px;width:100%"><b>Verify ${esc(rs.name)} v${rs.version}?</b><span class="small">I have checked every rule below against the current official text, including clauses, thresholds, units, effective dates and required wording.</span><label class="fld">Verification note<input id="v-note"></label><div class="row"><button class="primary" data-act="verifyYes">Mark verified</button><button data-act="verifyNo">Cancel</button></div></div>`:`<button class="primary" data-act="verify">Verify this rule set</button>`):`<button data-act="unverify">Return to draft</button>`}<button data-act="addRule">Add rule (JSON)</button></div>`:''}
+ ${S.addingRule?`<div class="stack"><label class="fld">Rule JSON<textarea id="ar-json" style="min-height:200px;font-family:var(--f-mono)">${esc(JSON.stringify({id:'new_rule',claim:'new_claim',family:'fat',wording:'Wording',kind:'threshold',logic:'all',checks:[{label:'Condition',nutrients:['fat_total_g'],basis:'per100',op:'<=',solid:3,liquid:1.5,unit:'g'}],conditions:'',requiredWording:'',source:'',clause:'',url:'',effectiveDate:'',category:'',appeal:3},null,2))}</textarea></label><div class="row"><button class="primary" data-act="saveNewRule">Save as new version</button><button data-act="cancelRule">Cancel</button></div></div>`:''}
+ ${(rs.rules||[]).map((r,i)=>ruleRow(rs,r,i)).join('')}
+ ${rs.history?.length?`<details><summary>Version history (${rs.history.length})</summary>${rs.history.slice().reverse().map(h=>`<div class="small rule">v${h.version} · ${esc(h.change)} · ${esc(nameOf(h.by))}, ${day(h.at)}</div>`).join('')}</details>`:''}</div>`
+ :`<div class="panel stack"><h2>${esc(marketInfo(code).name)}: market rules pending</h2><p class="muted" style="margin:0">No rule set yet. Claims for this market show as Market rules pending, and PackPick won't fall back to another market's rules.</p>${S.canEdit?`<div class="grid2"><label class="fld">Authority and instrument<input id="nr-auth" placeholder="e.g. Ministry of Health, Food Regulations 1985"></label><label class="fld">Notes<input id="nr-notes"></label></div><div><button class="primary" data-act="createRs">Create draft rule set</button></div>`:''}</div>`)}</div>`;}
+function ruleRow(rs,r,i){const ed=S.editRule===i;const ck=(r.checks||[]).map(c=>`${c.label}: ${c.nutrients?c.nutrients.map(n=>NUT[n]?.label.replace('– ','')).join(' + '):NUT[c.nutrient]?.label} ${BASIS[c.basis]||'reduction'} ${c.op||'≥'} ${c.solid??c.minReductionPct??''}${c.liquid!=null?' (liquid '+c.liquid+')':''} ${c.unit||'%'}`).join('; ');
+ if(!ed)return `<div class="rule"><div class="spread"><b>${esc(r.wording)}</b><span class="small muted">${esc(r.kind)}${r.logic==='any'?' · any condition':''}${S.canEdit?` · <button class="small ghost" data-act="editRule" data-i="${i}">Edit</button>`:''}</span></div>
+  <div class="small">${esc(ck||r.conditions||'')}</div>${r.conditions&&ck?`<div class="small muted">${esc(r.conditions)}</div>`:''}${r.requiredWording?`<div class="small"><b>Required wording:</b> ${esc(r.requiredWording)}</div>`:''}
+  <div class="small muted">${esc(r.source||'')} · ${esc(r.clause||'')} · effective ${esc(r.effectiveDate||'—')} · ${esc(r.category||'')}${r.url?` · <a href="${esc(r.url)}" target="_blank" rel="noopener">source</a>`:''}</div></div>`;
+ return `<div class="rule stack"><b>Edit ${esc(r.wording)}</b><label class="fld">Rule JSON (saving creates v${rs.version+1} and returns the set to draft)<textarea id="er-json" style="min-height:260px;font-family:var(--f-mono)">${esc(JSON.stringify(r,null,2))}</textarea></label>
+ <label class="fld">What changed<input id="er-why" placeholder="e.g. Updated threshold per amendment 2026"></label><div class="row"><button class="primary" data-act="saveRule" data-i="${i}">Save new version</button><button data-act="cancelRule">Cancel</button><button class="ghost" data-act="delRule" data-i="${i}">Remove rule</button></div></div>`;}
+
+function vGuide(){return `<div class="stack"><h1>Demo guide</h1>
+ <div class="banner sample-b small">The demo uses SAMPLE DATA. Results are labelled, never approvable, and not regulatory advice.</div>
+ <div class="panel stack"><h3>First time on a device</h3><p style="margin:0">Tap <b>Set your name</b> (top right), enter your name and choose your role. On a phone, add PackPick to your home screen: in Safari tap Share → Add to Home Screen, or in Chrome tap ⋮ → Install app.</p></div>
+ <div class="panel stack"><h3>Before the demo (QA, once)</h3><p style="margin:0">Open <b>Rules</b>, review the drafted Australia, New Zealand, United Kingdom and United States rule sets against the official sources, and choose <b>Verify this rule set</b> for each one you've checked. Until then every market correctly shows Market rules pending. Then, under <b>Backup</b>, download the rules file and share it so everyone imports the same verified rules.</p></div>
+ <div class="panel stack"><h3>On a phone</h3><ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+ <li>On <b>Check a pack</b>, tap <b>Try a SAMPLE pack</b>, or take a photo of a real nutrition panel.</li>
+ <li>PackPick shows the <b>nutrition panel</b> and the <b>5 best claims</b>. Sugars per 100 g is highlighted (read as 12): change it to <span class="mono">1.2</span>. Trans fat isn't on the panel: tap <i>Not on pack: keep missing</i>. Then tap <i>These numbers match the pack</i>.</li>
+ <li>Tap the markets button and choose Australia, New Zealand and United Kingdom. “Low fat” comes first.</li>
+ <li>Tap <b>See breakdown</b>: the Overall Top Pick, each market's shortlist and <i>Why this qualifies</i>, with calculations and official sources.</li>
+ <li>Add United States and Singapore to see <b>Best coverage</b>: the US has no “low sugar” claim and needs the RACC, and Singapore is pending.</li>
+ <li>Tap <b>Download QA summary</b>.</li></ol></div></div>`;}
+
+/* ---------- simple flow: check a pack → results → breakdown ---------- */
+function qMarkets(){try{const m=JSON.parse(localStorage.getItem('packpick.markets')||'null');if(Array.isArray(m)&&m.length)return m;}catch(e){}return ['AU'];}
+function setQMarkets(m){try{localStorage.setItem('packpick.markets',JSON.stringify(m));}catch(e){}}
+const isFlagged=(p,k)=>p.extracted?.nutrients?.[k]?.flag?.status==='open';
+function nipPanel(p){const x=p.extracted;return `<div class="nipcard"><div class="niphead">NUTRITION INFORMATION</div>
+ <div class="grid2"><label class="fld">Serving size (${esc(x.servingSize?.unit||'g')})<input id="x-ss" class="num" inputmode="decimal" data-f="ss" value="${esc(x.servingSize?.value??'')}" placeholder="missing"></label><label class="fld">Servings per pack<input id="x-spp" data-f="spp" value="${esc(x.servingsPerPack??'')}"></label></div>
+ <div class="tablewrap"><table class="nip"><thead><tr><th></th><th class="n">Per serving</th><th class="n">${per100Label(p)}</th><th></th></tr></thead><tbody>${nipRows(p)}</tbody></table></div></div>`;}
+function quickTop(p,codes){const ms=codes.map(c=>evalMarket(p,c));const g={};
+ for(const m of ms)for(const r of m.results){if(r.status!=='meets'||r.wording.startsWith('__'))continue;const k=r.wording.toLowerCase();const e=g[k]=g[k]||{wording:r.wording,meets:[],scores:[],best:null};e.meets.push(m.code);e.scores.push(r.score);if(!e.best||r.score>e.best.score)e.best=r;}
+ const list=Object.values(g).map(e=>({...e,avg:e.scores.reduce((a,b)=>a+b,0)/e.scores.length})).sort((a,b)=>b.meets.length-a.meets.length||b.avg-a.avg).slice(0,5);
+ return {ms,list};}
+function marketPicker(p){const sel=new Set(p.markets||[]);return `<div class="mchips">${(S.markets?.list||[]).map(m=>`<button class="mchip" data-act="qmtog" data-code="${m.code}" aria-pressed="${sel.has(m.code)}" title="${esc(rsStatusText(m.code))}"><span class="dot ${rsDot(m.code)}"></span>${esc(m.name)}</button>`).join('')}</div>`;}
+function vQuick(){
+ if(S.busy==='extract')return `<div class="panel stack" style="max-width:620px;margin:32px auto"><h1>Reading the pack…</h1><p class="muted" style="margin:0">${esc(S.ocrStep||'Starting…')}</p><div class="progress" style="height:10px;flex:none"><i style="width:0%"></i></div><p class="small muted" style="margin:0">Photos are read on this device. The first time takes a little longer.</p></div>`;
+ return `<div class="stack" style="max-width:860px;margin:0 auto">
+ <div><h1 style="font-size:1.9rem">What can this pack claim?</h1><p class="muted" style="margin:6px 0 0">Add the nutrition panel. PackPick reads it and shows the best front-of-pack claims.</p></div>
+ ${S.err?`<div class="banner warn small">${esc(S.err)}</div>`:''}
+ <div class="qopts">
+  <button class="panel qopt" data-act="qCam"><span class="qicon" aria-hidden="true">◉</span><b>Take a photo</b><span class="small muted">Point your camera at the nutrition panel.</span></button>
+  <div class="panel qopt"><span class="qicon" aria-hidden="true">⧉</span><b>Paste a picture</b><div class="pastebox small" contenteditable="true" id="q-paste" role="textbox" aria-label="Paste a picture here" data-ph="Tap here, then paste"></div></div>
+  <button class="panel qopt" data-act="qTextOpen"><span class="qicon" aria-hidden="true">≡</span><b>Enter the text</b><span class="small muted">Type or paste the panel as text.</span></button>
+ </div>
+ ${S.qText?`<div class="panel stack"><label class="fld">Nutrition panel (and ingredients, if you have them)<textarea id="q-text" style="min-height:190px" placeholder="Serving size 12 g&#10;Energy 194 kJ 1615 kJ&#10;Protein 0.9 g 7.6 g&#10;Fat, total 0.3 g 2.6 g&#10;…&#10;Ingredients: …"></textarea></label><div class="row"><button class="primary" data-act="qTextGo">Check claims</button><button class="ghost" data-act="qTextClose">Cancel</button></div></div>`:''}
+ <div class="row small"><button class="ghost" data-act="qUpload">Choose a photo from your device</button><button class="ghost" data-act="qSample">Try a SAMPLE pack</button></div></div>`;}
+function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
+ if(!(p.markets||[]).length)p.markets=['AU'];const codes=p.markets;const t=quickTop(p,codes);const open=openFlags(p);
+ const unver=t.ms.filter(m=>!m.verified).map(m=>m.name);
+ return `<div class="stack">
+ <div class="spread"><button class="ghost" data-act="qNew">← Check another pack</button>${p.sample?'<span class="chip sample">SAMPLE DATA</span>':''}</div>
+ <div class="qres">
+ <div class="stack">
+  <h2>Nutrition panel</h2>
+  ${open.length?`<div class="banner warn small"><b>${open.length} number${open.length>1?'s':''} to check.</b> Highlighted values may be misread. Fix them, or confirm they match the pack. Claims that use them are held back until you do.</div>`:''}
+  ${nipPanel(p)}
+  <details><summary>Ingredients${p.extracted.ingredientsText?'':' (none found)'}</summary><label class="fld" style="padding-bottom:10px">Needed for “No added sugar”<textarea id="x-ing" data-f="ing">${esc(p.extracted.ingredientsText||'')}</textarea></label></details>
+  <details><summary>Photos (${(p.captures||[]).length})</summary><div class="stack" style="padding-bottom:10px">${(p.captures||[]).map(c=>c.method==='text'?`<div class="textcap">${esc(c.text)}</div>`:capSrc(c)?`<img src="${esc(capSrc(c))}" alt="Pack photo" style="border-radius:8px;border:1px solid var(--line)">`:'').join('')}<div class="row"><button class="small" data-act="qAddCam">Add another photo</button><button class="small" data-act="qAddUp">Add from device</button></div></div></details>
+  ${p.confirmed?`<div class="row">${chip('meets','Numbers checked')}<span class="small muted">${esc(nameOf(p.confirmedBy))} · ${day(p.confirmedAt)}</span></div>`:`<div><button data-act="qConfirm" ${open.length?'disabled':''}>These numbers match the pack</button></div>`}
+ </div>
+ <div class="stack">
+  <div class="spread"><h2>Best claims</h2><button class="small" data-act="qMk" aria-expanded="${!!S.qMk}">${esc(codes.map(c=>marketInfo(c).name).join(', '))} ▾</button></div>
+  ${S.qMk?`<div class="panel stack"><span class="small muted">Check for these markets:</span>${marketPicker(p)}</div>`:''}
+  ${unver.length?`<div class="banner small">QA hasn't verified the ${esc(unver.join(', '))} rules yet, so these are previews.</div>`:''}
+  ${t.list.length?`<div class="panel qlist">${t.list.map((g,i)=>`<div class="qclaim"><span class="qnum">${i+1}</span><div class="stack" style="gap:4px;flex:1"><div class="row"><span class="w"><b>${esc(g.wording)}</b></span>${copyBtn(g.wording)}</div><span class="small">${codes.length>1?`<b>${g.meets.length} of ${codes.length} markets</b> (${esc(g.meets.map(c=>marketInfo(c).name).join(', '))}). `:''}${esc(whyText(g.best,p))}</span></div></div>`).join('')}</div>`
+   :`<div class="panel"><b>No claim qualifies yet.</b><p class="small muted" style="margin:4px 0 0">${open.length?'Check the highlighted numbers first.':'With these numbers, none of the checked nutrition claims qualify in the selected markets.'}</p></div>`}
+  <button class="primary big" data-act="qBreakdown">See breakdown</button>
+  <p class="small muted" style="margin:0">Suggestions only. QA must approve the exact wording before it goes on a pack.</p>
+ </div></div></div>`;}
+function vBreakdown(){const p=P();if(!p||!p.extracted)return vQuick();
+ return `<div class="stack"><div class="spread"><button class="ghost" data-act="nav" data-v="result">← Back to results</button>${p.sample?'<span class="chip sample">SAMPLE DATA</span>':''}</div>
+ <div><h1>Breakdown</h1><p class="muted small" style="margin:4px 0 0">Why each claim does or doesn't qualify, market by market, with the numbers, limits and official sources.</p></div>
+ <details><summary>Markets: ${esc((p.markets||[]).map(c=>marketInfo(c).name).join(', ')||'none')} ▾</summary><div style="padding-bottom:10px">${marketPicker(p)}</div></details>
+ ${sClaimsBody(p)}
+ <div class="panel stack"><div class="row"><button class="primary" data-act="download">Download QA summary</button><button data-act="openFull" data-s="evidence">Add evidence</button><button data-act="openFull" data-s="details">Name, SKU and details</button></div>
+ <span class="small muted">Evidence (formulation, specs, lab results) is needed for claims like “No added sugar”.</span></div></div>`;}
+async function newQuickProduct(sample){const id=uid();const d=new Date();
+ const p={id,sample:!!sample,...(sample?clone(SAMPLE_DETAILS):{company:'',brand:'',name:'Pack check '+d.toLocaleDateString(undefined,{day:'numeric',month:'short'})+', '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}),sku:'',packVersion:'',categoryKind:'other',physical:'solid',usRaccG:null}),
+  captures:[],evidence:[],evidenceChecks:{},reference:null,markets:qMarkets(),confirmed:false,createdAt:now(),createdBy:S.me.id||null};
+ S.pid=id;S.qMk=false;await saveProduct(p);return p;}
+async function runQuick(){S.view='quick';S.err='';render();await extract();if(!S.err&&P()?.extracted){S.view='result';window.scrollTo(0,0);}render();}
+async function handlePicked(files,method){files=files.filter(Boolean);if(!files.length)return;
+ if(S.pickMode==='quick'||S.pickMode==='quickAdd'){const fresh=S.pickMode==='quick';S.pickMode=null;if(fresh)await newQuickProduct(false);for(const f of files)await addCapture('any',method,f);return runQuick();}
+ for(const f of files)await addCapture(S.pickKind,method,f);}
+
+/* ---------- actions ---------- */
+async function newProduct(sample){const id=uid();const p={id,sample:!!sample,...(sample?clone(SAMPLE_DETAILS):{company:'',brand:'',name:'',sku:'',packVersion:'',categoryKind:'savoury',physical:'solid',usRaccG:null}),captures:[],evidence:[],evidenceChecks:{},reference:null,markets:['AU'],confirmed:false,createdAt:now(),createdBy:S.me?.id||null};
+ S.pid=id;S.view='product';S.step=sample?'capture':'details';S.chk=false;await saveProduct(p);}
+async function addCapture(kind,method,file,text){const p=P();const c={id:uid(),kind,method,at:now(),by:S.me?.id||null};
+ if(text!=null)c.text=text;
+ if(file){const img=await shrinkImage(file);S.mem[c.id]={blob:img,url:URL.createObjectURL(img)};try{c.assetId=await storeBlob(img);}catch(e){toast('Photo kept for this session only: this device\'s storage is full or blocked.');}}
+ p.captures=[...(p.captures||[]),c];touch(p);}
+async function imageBlobs(p){const out=[];for(const c of p.captures||[]){if(c.method==='text'||c.method==='sample')continue;let b=S.mem[c.id]?.blob;if(!b&&c.assetId){try{b=await S.db.getBlob(c.assetId);}catch(e){}}if(b)out.push({c,b});}return out;}
+let extractCtl=null;
+/* ---------- on-device photo reading (Tesseract, no AI service) ---------- */
+async function shrinkImage(file,max=2200){try{const bmp=await createImageBitmap(file);const sc=Math.min(1,max/Math.max(bmp.width,bmp.height));const c=document.createElement('canvas');c.width=Math.round(bmp.width*sc);c.height=Math.round(bmp.height*sc);c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);return await new Promise(r=>c.toBlob(b=>r(b||file),'image/jpeg',.9));}catch(e){return file;}}
+async function prepForOcr(blob){try{const bmp=await createImageBitmap(blob);const sc=Math.min(3,Math.max(1,2400/bmp.width));const c=document.createElement('canvas');c.width=Math.round(bmp.width*sc);c.height=Math.round(bmp.height*sc);const x=c.getContext('2d',{willReadFrequently:true});x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.imageSmoothingQuality='high';x.drawImage(bmp,0,0,c.width,c.height);
+ const im=x.getImageData(0,0,c.width,c.height),d=im.data;let sum=0;for(let i=0;i<d.length;i+=4){const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];d[i]=g;sum+=g;}const thr=Math.min(200,Math.max(90,sum/(d.length/4)*0.75));
+ for(let i=0;i<d.length;i+=4){const v=d[i]<thr?0:255;d[i]=d[i+1]=d[i+2]=v;}x.putImageData(im,0,0);
+ return await new Promise(r=>c.toBlob(b=>r(b||blob),'image/png'));}catch(e){return blob;}}
+async function ocr(blob,onProg){
+ if(!window.Tesseract)throw {message:'The photo reader is still loading. It needs an internet connection the first time. Try again in a moment.'};
+ const w=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text')onProg(m.progress);}});
+ try{await w.setParameters({tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'});const {data}=await w.recognize(await prepForOcr(blob));return {text:data.text||'',lines:(data.lines||[]).map(l=>({text:l.text,conf:l.confidence}))};}
+ finally{await w.terminate();}}
+function cleanNums(s){return String(s).replace(/(\d)\s*¢/g,'$1g').replace(/(\d)\s*[,·]\s*(\d)/g,'$1.$2').replace(/(\d)[oO]/g,(m,a)=>a+'0').replace(/[oO](\d)/g,(m,a)=>'0'+a).replace(/(\d)[lI|]/g,(m,a)=>a+'1').replace(/[lI|](\d)/g,(m,a)=>'1'+a);}
+const NUT_MATCH=[['fat_saturated_g',/saturat/i],['fat_trans_g',/\btrans\b/i],['sugars_g',/sugar/i],['dietary_fibre_g',/fib(re|er)/i],['energy_kj',/energy|kilojoule/i],['protein_g',/protein/i],['carbohydrate_g',/carbo/i],['sodium_mg',/sodium/i],['fat_total_g',/\bfat\b/i]];
+function parseNip(lines){
+ const out={nutrients:{},servingSize:{value:null,unit:'g'},servingsPerPack:'',liquid:false};
+ const all=cleanNums(lines.map(l=>l.text).join('\n'));
+ const ss=all.match(/serving\s*size[^\d\n]*(\d+(?:\.\d+)?)\s*(g|ml)/i);if(ss)out.servingSize={value:+ss[1],unit:/ml/i.test(ss[2])?'mL':'g'};
+ const sp=all.match(/servings?\s*per\s*(?:package|pack|container)[^\d\n]*((?:approx\.?\s*)?\d+(?:\.\d+)?)/i);if(sp)out.servingsPerPack=sp[1];
+ if(/per\s*100\s*ml/i.test(all))out.liquid=true;
+ for(const l of lines){const t=cleanNums(l.text);
+  const hit=NUT_MATCH.find(([k,re])=>re.test(t));if(!hit)continue;const k=hit[0];
+  if(out.nutrients[k]&&(out.nutrients[k].per100!=null||out.nutrients[k].perServing!=null))continue;
+  let lostDot=false;
+  let toks=[...t.matchAll(/(\d+(?:\.\d+)?)\s*(kj|kcal|cal|mg|g|%)?/gi)].map(m=>{let s=m[1],v=+s;if(/^0\d+$/.test(s)){v=+('0.'+s.slice(1));lostDot=true;}return {v,u:(m[2]||'').toLowerCase()};}).filter(x=>x.u!=='%');
+  if(/per\s*100/i.test(t))toks=toks.filter(x=>x.v!==100);
+  if(k==='energy_kj'){const kj=toks.filter(x=>x.u==='kj');if(kj.length)toks=kj;else{const kc=toks.filter(x=>x.u==='kcal'||x.u==='cal');if(kc.length)toks=kc;}}
+  const unit=k==='energy_kj'?(toks[0]&&(toks[0].u==='kcal'||toks[0].u==='cal')?'kcal':'kJ'):k==='sodium_mg'?(toks.some(x=>x.u==='g')&&!toks.some(x=>x.u==='mg')?'g':'mg'):(toks.some(x=>x.u==='mg')&&!toks.some(x=>x.u==='g')?'mg':'g');
+  const n={unit,perServing:null,per100:null,flag:null};
+  if(toks.length>=2){n.perServing=toks[0].v;n.per100=toks[1].v;if(toks.length>2)n.flag={type:'conflict',note:`Found ${toks.length} numbers on this line (${toks.map(x=>x.v).join(', ')}). Used the first two. Check against the pack.`,status:'open'};}
+  else if(toks.length===1){n.per100=toks[0].v;n.flag={type:'missing',note:'Only one number found on this line. It went into the per-100 column. Check which column it belongs to.',status:'open'};}
+  if(!n.flag&&lostDot)n.flag={type:'blurry',note:'A decimal point looked missing (e.g. "09" read as 0.9). Check against the pack.',status:'open'};
+  if(!n.flag&&l.conf!=null&&l.conf<75)n.flag={type:'blurry',note:`The photo reader was only ${Math.round(l.conf)}% sure about this line.`,status:'open'};
+  out.nutrients[k]=n;}
+ // Missed decimal points: if one column is 10x what the other column and the serving size imply, suggest the fix and keep it flagged.
+ const ssv=out.servingSize.value;
+ if(ssv)for(const [k,n] of Object.entries(out.nutrients)){if(NUT[k].unit!=='g'||n.perServing==null||n.per100==null)continue;
+  const near=(a,b)=>b>0&&a/b>=.75&&a/b<=1.33;const tenX=(a,b)=>b>0&&a/b>=5&&a/b<=20;const e100=n.perServing*100/ssv,eps=n.per100*ssv/100;
+  if(n.per100<1)continue;
+  if(tenX(n.per100,e100)&&near(n.per100/10,e100)){n.flag={type:'blurry',note:`Per 100 read as ${n.per100}. A decimal point was probably missed, so PackPick suggests ${fmt(n.per100/10)}. Check against the pack.`,status:'open'};n.per100=+fmt(n.per100/10);}
+  else if(tenX(n.perServing,eps)&&near(n.perServing/10,eps)){n.flag={type:'blurry',note:`Per serving read as ${n.perServing}. A decimal point was probably missed, so PackPick suggests ${fmt(n.perServing/10)}. Check against the pack.`,status:'open'};n.perServing=+fmt(n.perServing/10);}}
+ return out;}
+function parseIngredients(text){const t=String(text).replace(/\r/g,'');const m=t.match(/ingredients?\s*[:\-.]?\s*([\s\S]*)/i);let s=m?m[1]:t;
+ s=s.split(/\n\s*\n|\b(?:contains|allergens?|may contain|may be present|manufactured)\b/i)[0];return s.replace(/\s*\n\s*/g,' ').replace(/\s+/g,' ').trim().replace(/\.$/,'');}
+async function extract(){const p=P();S.err='';const caps=p.captures||[];
+ if(caps.length&&caps.every(c=>c.method==='sample')){applyExtraction(p,clone(SAMPLE_EXTRACTION));return;}
+ S.busy='extract';S.ocrStep='Starting the photo reader…';render();
+ try{const imgs=await imageBlobs(p);const texts=caps.filter(c=>c.method==='text');
+  const nipLines=[],ingTexts=[],transcript=[],warnings=[];let i=0;
+  for(const {c,b} of imgs){S.ocrStep=`Reading photo ${++i} of ${imgs.length}…`;render();
+   const r=await ocr(b,pr=>{const bar=document.querySelector('.progress>i');if(bar)bar.style.width=Math.round(pr*100)+'%';});
+   transcript.push(`[${c.kind==='nip'?'NIP':'Ingredients'} photo]\n`+r.text.trim());if(c.kind!=='ingredients')nipLines.push(...r.lines);if(c.kind==='ingredients'||(c.kind==='any'&&/ingredient/i.test(r.text)))ingTexts.push(r.text);}
+  for(const c of texts){transcript.push(`[Pasted ${c.kind==='nip'?'NIP':'ingredients'} text]\n`+c.text);if(c.kind!=='ingredients')nipLines.push(...c.text.split(/\n/).map(t=>({text:t,conf:null})));if(c.kind==='ingredients'||(c.kind==='any'&&/ingredient/i.test(c.text)))ingTexts.push(c.text);}
+  if(caps.some(c=>c.method!=='text'&&c.method!=='sample'&&!imgs.find(x=>x.c.id===c.id)))warnings.push('Some photos are no longer stored on this device, so they were not read.');
+  if(!nipLines.length&&!ingTexts.length)throw {message:'Nothing to read yet. Add a photo or paste the text first.'};
+  const nip=parseNip(nipLines);
+  const x={source:`On-device reading of ${imgs.length} photo${imgs.length===1?'':'s'}${texts.length?' and pasted text':''}, ${day(now())}`,servingSize:nip.servingSize,servingsPerPack:nip.servingsPerPack,nutrients:{},ingredientsText:ingTexts.map(parseIngredients).filter(Boolean).join(', '),warnings,transcript:transcript.join('\n\n')};
+  for(const {k,unit} of NUTS)x.nutrients[k]=nip.nutrients[k]||{unit,perServing:null,per100:null,flag:{type:'missing',note:'Not found in the photo or text.',status:'open'}};
+  if(nip.liquid)p.physical='liquid';
+  warnings.push('Photo reading is automatic and can misread small print. Check every value against the pack.');
+  applyExtraction(p,x);
+ }catch(e){S.err=e.message||'Couldn\'t read the pack.';}
+ finally{S.busy='';render();}}
+function applyExtraction(p,x){for(const {k} of NUTS){const n=x.nutrients[k];if(n)n.orig=null;if(n?.flag)n.flag.orig=`${n.perServing??'—'} / ${n.per100??'—'}`;}
+ p.extracted=x;mergeFlags(p,null);p.confirmed=false;p.unconfirmedNote='';S.chk=false;S.step='review';saveProduct(p);}
+
+async function writeRs(rs,change){const prev=S.rulesets[rs.code];rs.history=[...(prev?.history||[]),{version:rs.version,change,by:S.me?.id||null,at:now()}].slice(-60);rs.updatedAt=now();rs.updatedBy=S.me?.id||null;
+ try{if(prev)await S.db.doc(`rulesetHistory/${rs.code}-v${prev.version}`).set({...clone(prev),archivedAt:now()});await S.db.doc('rulesets/'+rs.code).set(clone(rs));toast('Saved '+rs.code+' v'+rs.version);}catch(e){toast('Could not save rules: '+(e.code==='invalid_argument'?'only QA editors can change rules.':e.message));}}
+async function writeMarkets(list){try{await S.db.doc('config/markets').set({list,updatedAt:now(),updatedBy:S.me?.id||null});}catch(e){toast('Only QA editors can change markets.');}}
+
+document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-act]');if(!b)return;const a=b.dataset.act,p=P();
+ switch(a){
+ case 'qCam':S.pickMode='quick';$('#fileCam').click();return;
+ case 'qUpload':S.pickMode='quick';$('#fileUp').click();return;
+ case 'qAddCam':S.pickMode='quickAdd';$('#fileCam').click();return;
+ case 'qAddUp':S.pickMode='quickAdd';$('#fileUp').click();return;
+ case 'qTextOpen':S.qText=true;render();$('#q-text')?.focus();return;
+ case 'qTextClose':S.qText=false;break;
+ case 'qTextGo':{const t=($('#q-text')?.value||'').trim();if(!t){toast('Type or paste the panel first.');return;}S.qText=false;await newQuickProduct(false);await addCapture('any','text',null,t);return runQuick();}
+ case 'qSample':{const p0=await newQuickProduct(true);p0.captures=[{id:uid(),kind:'nip',method:'sample',at:now()},{id:uid(),kind:'ingredients',method:'sample',at:now()}];await saveProduct(p0);return runQuick();}
+ case 'qNew':S.view='quick';S.qText=false;S.err='';window.scrollTo(0,0);break;
+ case 'qMk':S.qMk=!S.qMk;break;
+ case 'qmtog':{const s0=new Set(p.markets||[]);s0.has(b.dataset.code)?s0.delete(b.dataset.code):s0.add(b.dataset.code);if(!s0.size){toast('Keep at least one market.');return;}const order=(S.markets?.list||[]).map(m=>m.code);p.markets=[...s0].sort((x,y)=>order.indexOf(x)-order.indexOf(y));setQMarkets(p.markets);saveProduct(p);return;}
+ case 'qConfirm':if(openFlags(p).length)return;p.confirmed=true;p.confirmedBy=S.me.id||null;p.confirmedAt=now();p.confirmedHash=dataHash(p);p.unconfirmedNote='';saveProduct(p);toast('Numbers checked');return;
+ case 'qBreakdown':S.view='breakdown';window.scrollTo(0,0);break;
+ case 'openFull':S.view='product';S.step=b.dataset.s;window.scrollTo(0,0);break;
+ case 'more':S.more=!S.more;break;
+ case 'nav':S.more=false;S.view=b.dataset.v;S.editRule=null;S.addingRule=false;window.scrollTo(0,0);break;
+ case 'open':S.pid=b.dataset.id;S.view='product';S.step='details';S.chk=false;S.confirmDel=false;break;
+ case 'newProduct':return newProduct(false);
+ case 'newSample':return newProduct(true);
+ case 'step':S.step=b.dataset.s;S.err='';window.scrollTo(0,0);break;
+ case 'delProduct':S.confirmDel=true;break;case 'delNo':S.confirmDel=false;break;
+ case 'delYes':S.confirmDel=false;try{if(S.db)await S.db.doc('products/'+p.id).delete();}catch(e){toast('Could not delete.');}delete S.products[p.id];S.view='products';break;
+ case 'cam':S.pickKind=b.dataset.kind;S.pickMethod='photo';$('#fileCam').click();return;
+ case 'upload':S.pickKind=b.dataset.kind;S.pickMethod='upload';$('#fileUp').click();return;
+ case 'pasteHint':S.pasteKind=b.dataset.kind;S.textKind=null;break;
+ case 'textCap':S.textKind=b.dataset.kind;S.pasteKind=null;break;
+ case 'cancelText':S.textKind=null;break;
+ case 'saveText':{const t=$('#t-'+b.dataset.kind).value.trim();if(t){S.textKind=null;await addCapture(b.dataset.kind,'text',null,t);}return;}
+ case 'rmCap':p.captures=(p.captures||[]).filter(c=>c.id!==b.dataset.id);touch(p);return;
+ case 'sampleImgs':p.captures=[...(p.captures||[]).filter(c=>c.method!=='sample'),{id:uid(),kind:'nip',method:'sample',at:now()},{id:uid(),kind:'ingredients',method:'sample',at:now()}];touch(p);return;
+ case 'extract':return extract();
+ case 'stopExtract':extractCtl?.abort();return;
+ case 'ack':{const f=p.extracted.nutrients[b.dataset.k].flag;f.status='acknowledged';f.by=S.me?.id||null;f.at=now();touch(p);return;}
+ case 'confirm':if(openFlags(p).length)return;p.confirmed=true;p.confirmedBy=S.me?.id||null;p.confirmedAt=now();p.confirmedHash=dataHash(p);p.unconfirmedNote='';saveProduct(p);toast('Values confirmed');return;
+ case 'addEv':case 'addEvFile':{const label=$('#e-label').value.trim();if(!label){toast('Give the evidence a label first.');return;}
+   const e={id:uid(),type:$('#e-type').value,label,note:$('#e-note').value.trim(),at:now(),by:S.me?.id||null};
+   if(a==='addEvFile'){S.pendingEv=e;$('#fileEv').click();return;}p.evidence=[...(p.evidence||[]),e];touch(p,false);return;}
+ case 'mtog':{const s=new Set(p.markets||[]);s.has(b.dataset.code)?s.delete(b.dataset.code):s.add(b.dataset.code);const order=(S.markets?.list||[]).map(m=>m.code);p.markets=[...s].sort((x,y)=>order.indexOf(x)-order.indexOf(y));saveProduct(p);return;}
+ case 'mset':{const v=b.dataset.set;p.markets=v==='verified'?(S.markets?.list||[]).map(m=>m.code).filter(c=>S.rulesets[c]?.status==='verified'):v?v.split(','):[];saveProduct(p);return;}
+ case 'copy':{const w=b.dataset.w;try{await navigator.clipboard.writeText(w);toast('Copied: '+w);}catch(e){const r=document.createRange();r.selectNodeContents(b.closest('.claim,.hero')?.querySelector('.w,.wording')||b);const s=getSelection();s.removeAllRanges();s.addRange(r);toast('Press Ctrl+C to copy');}return;}
+ case 'approve':if(!S.me.id){toast('Add your name under You first.');S.view='settings';break;}S.approving=b.dataset.code+'|'+b.dataset.rid;break;case 'approveNo':S.approving=null;break;
+ case 'approveYes':{const code=b.dataset.code,res=evalMarket(p,code).results.find(r=>r.rule.id===b.dataset.rid);if(!res||p.sample)return;
+   const doc={productId:p.id,sku:p.sku,packVersion:p.packVersion,productName:p.name,market:code,claimId:res.rule.id,wording:res.wording,reviewerId:S.me?.id||null,at:now(),dataHash:dataHash(p),rulesetVersion:S.rulesets[code].version,evidenceIds:(p.evidence||[]).map(e=>e.id),note:($('#ap-note')?.value||'').trim(),status:'approved',checks:res.checks.map(c=>({label:c.label,result:c.result,value:c.value??null,thr:c.thr??null,unit:c.unit||null}))};
+   try{await S.db.doc('approvals/'+apKey(p,code,res.rule)).set(doc);S.approving=null;toast('Approved for '+marketInfo(code).name);}catch(e){toast('Only QA editors can approve.');}return;}
+ case 'revoke':{const k=`${p.id}__${b.dataset.code}__${b.dataset.rid}`;const a0=S.approvals[k];if(!a0)return;try{await S.db.doc('approvals/'+k).set({...clone(a0),status:'withdrawn',withdrawnBy:S.me?.id||null,withdrawnAt:now()});}catch(e){toast('Only QA editors can change approvals.');}return;}
+ case 'download':if(!p.confirmed){toast('First tap “These numbers match the pack” on the results screen.');return;}saveFile(`PackPick QA summary - ${(p.sku||'SKU').replace(/[^\w.-]+/g,'_')} - ${(p.packVersion||'').replace(/[^\w.-]+/g,'_')}.html`,summaryHtml(p),'text/html');toast('QA summary downloaded');return;
+ case 'saveMe':{const n=$('#me-name').value.trim(),r=$('#me-role').value;if(!n){toast('Enter your name.');return;}saveMe(n,r);toast('Saved');break;}
+ case 'exportAll':return exportData('all');
+ case 'exportRules':return exportData('rules');
+ case 'exportProduct':return exportData('product',$('#exp-p').value);
+ case 'importFile':$('#fileImport').click();return;
+ case 'explain':{const g=crossMarket(p,p.markets).list.find(x=>x.wording===b.dataset.w);if(!g)return;S.busy='ai';render();
+   const facts=crossMarket(p,p.markets).ms.map(m=>{const r=g[m.code];return `${m.name}: ${m.verified?(r?STLABEL[r.status]:'no rule'):'Market rules pending'}${r?'. '+r.checks.map(c=>`${c.label} ${c.value!=null?fmt(c.value)+' '+(c.unit||''):''}${c.thr!=null?' vs '+(c.op||'')+fmt(c.thr):''} ${c.result}`).join('; '):''}`;}).join('\n');
+   try{const {text}=await S.sample(`Explain to a food packaging team, in 3 short plain-English sentences, why the claim "${g.wording}" is or isn't usable on ${p.name} in each market. Use only these calculated results; don't add rules, numbers or advice not listed. Say that QA approval is still needed.\n\n${facts}`,{modelTier:'quick'});S.ai[p.id+'|'+g.wording]=text;}catch(e){toast(e.code==='not_granted'?'Claude access was declined.':'Couldn\'t write an explanation.');}finally{S.busy='';render();}return;}
+ case 'mup':case 'mdown':{const l=clone(S.markets.list),i=+b.dataset.i,j=a==='mup'?i-1:i+1;[l[i],l[j]]=[l[j],l[i]];S.markets.list=l;render();return writeMarkets(l);}
+ case 'mrm':{const l=clone(S.markets.list);l.splice(+b.dataset.i,1);S.markets.list=l;render();return writeMarkets(l);}
+ case 'madd':{const n=$('#m-name').value.trim(),c=$('#m-code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(!n||!c){toast('Enter a name and code.');return;}if(S.markets.list.some(m=>m.code===c)){toast('That code is already listed.');return;}const l=[...clone(S.markets.list),{code:c,name:n}];S.markets.list=l;render();return writeMarkets(l);}
+ case 'verify':if(!S.me.id){toast('Add your name under You first.');S.view='settings';break;}S.verifying=S.rulesMarket;break;case 'verifyNo':S.verifying=null;break;
+ case 'verifyYes':{const rs=clone(S.rulesets[S.rulesMarket]);rs.status='verified';rs.verifiedBy=S.me?.id||null;rs.verifiedAt=now();rs.verifyNote=($('#v-note')?.value||'').trim();S.verifying=null;
+   try{await S.db.doc('rulesets/'+rs.code).update({status:'verified',verifiedBy:rs.verifiedBy,verifiedAt:rs.verifiedAt,verifyNote:rs.verifyNote,history:[...(rs.history||[]),{version:rs.version,change:'Verified by QA'+(rs.verifyNote?': '+rs.verifyNote:''),by:rs.verifiedBy,at:rs.verifiedAt}]});toast('Rule set verified');}catch(e){toast('Only QA editors can verify rules.');}return;}
+ case 'unverify':{const rs=S.rulesets[S.rulesMarket];try{await S.db.doc('rulesets/'+rs.code).update({status:'draft',history:[...(rs.history||[]),{version:rs.version,change:'Returned to draft',by:S.me?.id||null,at:now()}]});}catch(e){toast('Only QA editors can change rules.');}return;}
+ case 'editRule':S.editRule=+b.dataset.i;S.addingRule=false;break;case 'cancelRule':S.editRule=null;S.addingRule=false;break;
+ case 'addRule':S.addingRule=true;S.editRule=null;break;
+ case 'saveRule':case 'saveNewRule':case 'delRule':{const rs=clone(S.rulesets[S.rulesMarket]);let change='';
+   try{if(a==='delRule'){const r=rs.rules.splice(+b.dataset.i,1)[0];change='Removed rule '+r.wording;}
+     else{const r=JSON.parse($(a==='saveRule'?'#er-json':'#ar-json').value);if(!r.id||!r.wording||!r.kind)throw new Error('Rule needs id, wording and kind.');
+      if(a==='saveRule'){rs.rules[+b.dataset.i]=r;change=($('#er-why')?.value||'').trim()||'Edited '+r.wording;}else{if(rs.rules.some(x=>x.id===r.id))throw new Error('A rule with that id exists.');rs.rules.push(r);change='Added rule '+r.wording;}}
+   }catch(e){toast('Rule not saved: '+e.message);return;}
+   rs.version=(rs.version||0)+1;rs.status='draft';delete rs.verifiedBy;delete rs.verifiedAt;S.editRule=null;S.addingRule=false;return writeRs(rs,change+' (returned to draft)');}
+ case 'createRs':{const c=S.rulesMarket;const rs={code:c,name:marketInfo(c).name,authority:$('#nr-auth').value.trim(),notes:$('#nr-notes').value.trim(),status:'draft',version:1,rules:[],createdAt:now()};return writeRs(rs,'Created draft rule set');}
+ }
+ render();});
+
+document.addEventListener('change',ev=>{const t=ev.target;const f=t.dataset.f;if(!f)return;const p=P();
+ if(f==='rmsel'){S.rulesMarket=t.value;S.editRule=null;S.addingRule=false;render();return;}
+ if(f==='chk'){S.chk=t.checked;render();return;}
+ if(!p)return;
+ if(f==='det'){let v=t.value;if(t.dataset.k==='usRaccG')v=num(v);p[t.dataset.k]=v;const data=['physical','usRaccG','categoryKind'].includes(t.dataset.k);touch(p,data);return;}
+ const x=p.extracted;
+ if(f==='nut'){const n=x.nutrients[t.dataset.k]=x.nutrients[t.dataset.k]||{unit:NUT[t.dataset.k].unit};if(t.dataset.c==='unit')n.unit=t.value;else{const raw=t.value.trim().replace(',','.');const v=raw===''?null:num(raw);if(raw!==''&&v===null){toast('Enter a number, or leave blank for missing.');render();return;}n[t.dataset.c]=v;}mergeFlags(p,t.dataset.k);touch(p);return;}
+ if(f==='ss'){x.servingSize={...(x.servingSize||{}),value:num(t.value)};mergeFlags(p,null);touch(p);return;}
+ if(f==='ssu'){x.servingSize={...(x.servingSize||{}),unit:t.value};touch(p);return;}
+ if(f==='spp'){x.servingsPerPack=t.value;touch(p);return;}
+ if(f==='ing'){x.ingredientsText=t.value;touch(p);return;}
+ if(f==='evc'||f==='evcs'||f==='evcn'){const k=t.dataset.k;const e=p.evidenceChecks[k]=p.evidenceChecks[k]||{confirmed:false};
+  if(f==='evc'){e.confirmed=t.checked;e.by=S.me?.id||null;e.at=now();}if(f==='evcs')e.evidenceId=t.value||null;if(f==='evcn')e.note=t.value;touch(p,false);return;}
+ if(f==='ref'||f==='refv'){p.reference=p.reference||{name:'',source:'',per100:{}};if(f==='ref')p.reference[t.dataset.k]=t.value;else p.reference.per100[t.dataset.k]=num(t.value);touch(p,false);return;}});
+
+function onFile(input,handler){input.addEventListener('change',async()=>{const fs=[...input.files];input.value='';for(const f of fs)await handler(f);});}
+$('#fileCam').addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';handlePicked(fs,'photo');});
+$('#fileUp').addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';handlePicked(fs,'upload');});
+onFile($('#fileEv'),async f=>{const p=P(),e=S.pendingEv;S.pendingEv=null;if(!e)return;try{e.assetId=await storeBlob(f);e.fileName=f.name;}catch(err){toast('File not stored on this device. The note was still added.');}p.evidence=[...(p.evidence||[]),e];touch(p,false);});
+document.addEventListener('paste',ev=>{const cd=ev.clipboardData;if(!cd)return;let imgs=[...(cd.files||[])].filter(f=>f.type.startsWith('image/'));if(!imgs.length)imgs=[...(cd.items||[])].filter(i=>i.type.startsWith('image/')).map(i=>i.getAsFile()).filter(Boolean);
+ if(S.view==='quick'&&!S.busy){if(imgs.length){ev.preventDefault();S.pickMode='quick';handlePicked(imgs,'paste-image');return;}const t=cd.getData('text');if(t&&ev.target.id==='q-paste'){ev.preventDefault();S.qText=true;render();const ta=$('#q-text');if(ta){ta.value=t;ta.focus();}}return;}
+ if(S.view==='result'&&imgs.length){ev.preventDefault();S.pickMode='quickAdd';handlePicked(imgs,'paste-image');return;}
+ if(S.view!=='product'||S.step!=='capture'||!S.pasteKind||!imgs.length)return;ev.preventDefault();imgs.forEach(f=>addCapture(S.pasteKind,'paste-image',f));});
+document.addEventListener('input',e=>{if(e.target.id==='q-paste'&&!e.target.querySelector('img'))e.target.textContent='';});
+
+/* ---------- on-device storage (IndexedDB), same calls the page already uses ---------- */
+const LocalDB=(()=>{let idb;const cache=new Map();const subs=new Set();
+ const open=()=>new Promise((res,rej)=>{const r=indexedDB.open('packpick',1);r.onupgradeneeded=()=>{r.result.createObjectStore('docs');r.result.createObjectStore('blobs');};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+ const tx=(store,mode,fn)=>new Promise((res,rej)=>{const t=idb.transaction(store,mode);const q=fn(t.objectStore(store));t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});
+ async function init(){idb=await open();await new Promise((res,rej)=>{const t=idb.transaction('docs');const s=t.objectStore('docs');const ks=s.getAllKeys(),vs=s.getAll();t.oncomplete=()=>{ks.result.forEach((k,i)=>cache.set(k,vs.result[i]));res();};t.onerror=()=>rej(t.error);});}
+ const notify=()=>subs.forEach(f=>f());
+ const snap=path=>{const v=cache.get(path);return {id:path.split('/').pop(),exists:v!==undefined,data:()=>v,metadata:{fromCache:false,hasPendingWrites:false}};};
+ const put=async(path,v)=>{cache.set(path,v);await tx('docs','readwrite',s=>s.put(v,path));notify();};
+ function doc(path){return {path,id:path.split('/').pop(),
+  async get(){return snap(path);},
+  async set(d){await put(path,clone(d));},
+  async update(d){const cur=cache.get(path);if(cur===undefined)throw {code:'invalid_argument',message:'Document does not exist'};await put(path,Object.assign(clone(cur),clone(d)));},
+  async delete(){cache.delete(path);await tx('docs','readwrite',s=>s.delete(path));notify();},
+  onSnapshot(cb){const f=()=>cb(snap(path));subs.add(f);setTimeout(f,0);return ()=>subs.delete(f);}};}
+ function collection(name){const depth=name.split('/').length+1;return {onSnapshot(cb){const f=()=>{const docs=[...cache.keys()].filter(k=>k.startsWith(name+'/')&&k.split('/').length===depth).map(snap);cb({docs,size:docs.length,empty:!docs.length});};subs.add(f);setTimeout(f,0);return ()=>subs.delete(f);}};}
+ return {init,doc,collection,allDocs:()=>[...cache.entries()],
+  putBlob:(id,b)=>tx('blobs','readwrite',s=>s.put(b,id)),getBlob:id=>tx('blobs','readonly',s=>s.get(id))};})();
+function blobSrc(id){if(!id)return null;if(S.blobUrls[id])return S.blobUrls[id];if(S.blobUrls[id]===undefined&&S.db){S.blobUrls[id]=null;S.db.getBlob(id).then(b=>{if(b){S.blobUrls[id]=URL.createObjectURL(b);render();}}).catch(()=>{});}return null;}
+async function storeBlob(blob){const id=uid();await S.db.putBlob(id,blob);S.blobUrls[id]=URL.createObjectURL(blob);return id;}
+function saveFile(name,data,type){const b=data instanceof Blob?data:new Blob([data],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);}
+const blobToDataUrl=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(b);});
+
+/* ---------- you (no logins in this version) ---------- */
+function loadMe(){try{const m=JSON.parse(localStorage.getItem('packpick.me')||'{}');S.me={id:m.name||null};S.role=m.role==='qa'?'qa':'packaging';}catch(e){S.me={id:null};}S.canEdit=S.role==='qa';}
+function saveMe(name,role){S.me={id:name||null};S.role=role;S.canEdit=role==='qa';try{localStorage.setItem('packpick.me',JSON.stringify({name,role}));}catch(e){toast('This browser won\'t save settings (private mode?).');}}
+function vSettings(){return `<div class="stack"><h1>You</h1><div class="panel stack"><p class="small muted" style="margin:0">Your name is recorded on values you confirm, evidence you add and any QA approvals. It's saved on this device only.</p>
+ <label class="fld" style="max-width:360px">Your name<input id="me-name" value="${esc(S.me.id||'')}" autocomplete="name"></label>
+ <label class="fld" style="max-width:360px">Role<select id="me-role"><option value="packaging" ${S.role!=='qa'?'selected':''}>Packaging team</option><option value="qa" ${S.role==='qa'?'selected':''}>QA reviewer (verifies rules and approves claims)</option></select></label>
+ <div><button class="primary" data-act="saveMe">Save</button></div>
+ <p class="small muted" style="margin:0">This version has no logins, so roles work on trust. Only people your QA lead authorises should choose QA reviewer. Enforced logins need company hosting.</p></div></div>`;}
+
+/* ---------- backup and sharing ---------- */
+function vData(){const ps=Object.values(S.products);return `<div class="stack"><div><h1>Backup and share</h1><p class="muted small" style="margin:4px 0 0">PackPick keeps everything on this device. Nothing is sent to a server. Back up regularly, and share files through your team's shared folder.</p></div>
+ ${S.importMsg?`<div class="banner small">${esc(S.importMsg)}</div>`:''}
+ <div class="panel stack"><h3>Full backup</h3><p class="small muted" style="margin:0">Every product, photo, rule, market and approval on this device, in one file. If this phone is lost or the browser data is cleared, restore from this file.</p><div><button class="primary" data-act="exportAll">Download full backup</button></div></div>
+ <div class="panel stack"><h3>Share verified rules</h3><p class="small muted" style="margin:0">Rules and verifications are saved per device. After QA verifies or edits rules, QA downloads this file and everyone imports it, so the whole team checks against the same rules.</p><div><button data-act="exportRules">Download rules file</button></div></div>
+ <div class="panel stack"><h3>Share one product</h3><p class="small muted" style="margin:0">Send a product with its photos, evidence and approvals to a colleague.</p><div class="row"><select id="exp-p" style="max-width:320px">${ps.map(p=>`<option value="${p.id}">${esc(p.name||'Untitled')} · ${esc(p.sku||'')}</option>`).join('')}</select><button data-act="exportProduct" ${ps.length?'':'disabled'}>Download product file</button></div></div>
+ <div class="panel stack"><h3>Restore or import</h3><p class="small muted" style="margin:0">Open a backup, rules file or product file. New items are added. Where both copies exist, the more recent one is kept.</p><div><button data-act="importFile">Choose file…</button></div></div></div>`;}
+async function exportData(kind,pid){
+ const docs={};for(const [k,v] of S.db.allDocs()){
+  if(kind==='rules'&&!(k.startsWith('rulesets/')||k==='config/markets'))continue;
+  if(kind==='product'&&!(k==='products/'+pid||k.startsWith('approvals/'+pid+'__')))continue;
+  docs[k]=v;}
+ const blobs={};if(kind!=='rules'){const ids=new Set();for(const [k,v] of Object.entries(docs))if(k.startsWith('products/')){(v.captures||[]).forEach(c=>c.assetId&&ids.add(c.assetId));(v.evidence||[]).forEach(e=>e.assetId&&ids.add(e.assetId));}
+  for(const id of ids){const b=await S.db.getBlob(id).catch(()=>null);if(b)blobs[id]=await blobToDataUrl(b);}}
+ const label=kind==='rules'?'PackPick rules':kind==='product'?`PackPick product ${S.products[pid]?.sku||pid}`:'PackPick backup';
+ saveFile(`${label} ${new Date().toISOString().slice(0,10)}.json`.replace(/[^\w .-]+/g,'_'),JSON.stringify({app:'PackPick',format:1,kind,exportedAt:now(),exportedBy:S.me.id,docs,blobs}),'application/json');}
+function isNewer(path,a,b){if(path.startsWith('rulesets/'))return (a.version||0)>(b.version||0)||((a.version||0)===(b.version||0)&&a.status==='verified'&&b.status!=='verified');const t=x=>x.updatedAt||x.withdrawnAt||x.at||x.verifiedAt||'';return t(a)>t(b);}
+async function importData(file){let j;try{j=JSON.parse(await file.text());}catch(e){}
+ if(!j||j.app!=='PackPick'||!j.docs){toast('That file isn\'t a PackPick file.');return;}
+ let added=0,updated=0,kept=0;
+ for(const [id,d] of Object.entries(j.blobs||{})){if(!/^[A-Za-z0-9]+$/.test(id)||typeof d!=='string'||!d.startsWith('data:'))continue;try{await S.db.putBlob(id,await (await fetch(d)).blob());}catch(e){}}
+ for(const [path,v] of Object.entries(j.docs)){if(!/^(products|rulesets|approvals|config|rulesetHistory)\/[A-Za-z0-9_.\-~:@+]+$/.test(path)||!v||typeof v!=='object')continue;
+  const cur=await S.db.doc(path).get();if(!cur.exists){await S.db.doc(path).set(v);added++;}else if(isNewer(path,v,cur.data())){await S.db.doc(path).set(v);updated++;}else kept++;}
+ S.importMsg=`Imported ${file.name}: ${added} new, ${updated} updated, ${kept} kept because this device's copy was the same or newer.`;render();}
+
+/* ---------- boot ---------- */
+async function seedDefaults(){const seed=JSON.parse(document.getElementById('seed').textContent);await S.db.doc('config/markets').set(seed.markets);for(const [c,rs] of Object.entries(seed.rulesets))await S.db.doc('rulesets/'+c).set(rs);}
+async function boot(){loadMe();render();
+ try{await LocalDB.init();S.db=LocalDB;}catch(e){S.dbMissing=true;S.markets={list:[]};render();return;}
+ try{if(!(await S.db.doc('config/markets').get()).exists)await seedDefaults();}catch(e){toast('Couldn\'t load the starting rules.');}
+ S.db.collection('products').onSnapshot(s=>{const keep={};s.docs.forEach(d=>{keep[d.id]={id:d.id,...clone(d.data())};});for(const id in saveQ)if(S.products[id])keep[id]=S.products[id];S.products=keep;S.loaded.p=true;render();});
+ S.db.collection('rulesets').onSnapshot(s=>{S.rulesets={};s.docs.forEach(d=>S.rulesets[d.id]=clone(d.data()));S.loaded.r=true;render();});
+ S.db.doc('config/markets').onSnapshot(d=>{S.markets=d.exists?clone(d.data()):{list:[]};S.loaded.m=true;render();});
+ S.db.collection('approvals').onSnapshot(s=>{S.approvals={};s.docs.forEach(d=>S.approvals[d.id]=clone(d.data()));S.loaded.a=true;render();});
+ if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+ if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});}
+onFile($('#fileImport'),f=>importData(f));
+boot();
+</script>
+</body>
+</html>
