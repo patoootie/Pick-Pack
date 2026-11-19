@@ -1012,10 +1012,14 @@ function offToLite(o){const N=o.nutriments||{};const ss=num(o.serving_quantity);
  const map={energy_kj:['energy-kj',1],protein_g:['proteins',1],fat_total_g:['fat',1],fat_saturated_g:['saturated-fat',1],carbohydrate_g:['carbohydrates',1],sugars_g:['sugars',1],dietary_fibre_g:['fiber',1],sodium_mg:['sodium',1000]};
  for(const [k,[key,f]] of Object.entries(map)){let b=N[key+'_100g'];if(k==='energy_kj'&&(b===undefined||b==='')&&N['energy-kcal_100g']!=null)b=N['energy-kcal_100g']*4.184;if(b===undefined||b===''||b==null)continue;b=+b*f;b=NUT[k].unit==='g'?Math.round(b*10)/10:Math.round(b);
   nut[k]={unit:NUT[k].unit,per100:b,perServing:ss?Math.round(b*ss/100*10)/10:null,flag:null,q:{}};}
- return {id:'cmp_'+o.code,code:o.code,name:o.product_name||'Unnamed product',brand:o.brands||'',img:o.image_front_small_url||'',physical:'solid',markets:[],evidenceChecks:{},evidence:[],extracted:{servingSize:{value:ss,unit:'g'},nutrients:nut,ingredientsText:''}};}
+ return {id:'cmp_'+o.code,code:o.code,name:o.product_name||'Unnamed product',brand:o.brands||'',img:o.image_front_small_url||'',onPack:packClaims(o),physical:'solid',markets:[],evidenceChecks:{},evidence:[],extracted:{servingSize:{value:ss,unit:'g'},nutrients:nut,ingredientsText:''}};}
+// What the pack itself says, from the database's label tags (e.g. "Gluten free", "High fibre", "Organic").
+// Recycling and packaging marks are left out; only callouts a shopper would read as a claim are kept.
+const PACK_SKIP=/recycl|green-dot|fsc|triman|pefc|packaging|eco|nutriscore|nutri-score|halal-|kosher-|^en:made-in|\bcontains\b|scan|barcode/;
+function packClaims(o){return [...new Set((o.labels_tags||[]).filter(t=>/^en:/.test(t)&&!PACK_SKIP.test(t)).map(t=>t.slice(3).replace(/-/g,' ').replace(/^./,c=>c.toUpperCase())))].slice(0,8);}
 function claimsFor(q,code){try{return evalMarket(q,code).results.filter(r=>isNutritionRule(r.rule)&&(r.status==='meets'||r.status==='panel')).map(r=>r.wording);}catch(e){return [];}}
 async function cmpSearch(){const C=S.cmp;C.loading=true;C.err='';C.items=null;render();
- const fields='code,product_name,brands,nutriments,serving_quantity,image_front_small_url';
+ const fields='code,product_name,brands,nutriments,serving_quantity,image_front_small_url,labels_tags';
  const words=C.terms||String(C.tag).replace(/^[a-z]{2}:/,'').replace(/-/g,' ');
  const textUrl=`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(words)}&search_simple=1&action=process&json=1&page_size=40&fields=${fields}&tagtype_0=countries&tag_contains_0=contains&tag_0=australia`;
  const urls=C.terms?[textUrl]:[`https://world.openfoodfacts.org/api/v2/search?categories_tags=${encodeURIComponent(C.tag)}&countries_tags=en:australia&fields=${fields}&page_size=40&sort_by=unique_scans_n`,textUrl];
@@ -1023,7 +1027,7 @@ async function cmpSearch(){const C=S.cmp;C.loading=true;C.err='';C.items=null;re
  const get=async u=>{for(let i=0;i<2;i++){try{const r=await fetch(u);if(r.ok)return await r.json();}catch(e){}await new Promise(z=>setTimeout(z,1200));}return null;};
  try{let j=null;for(const u of urls){j=await get(u);if(j&&(j.products||[]).length)break;}if(!j)throw new Error('offline');const mine=cleanCode(P()?.barcode);
   C.items=(j.products||[]).filter(o=>o.code&&o.code!==mine&&o.nutriments&&['sugars_100g','fat_100g','sodium_100g'].some(k=>o.nutriments[k]!=null)).map(offToLite).slice(0,25);}
- catch(e){C.err='Couldn\'t reach Open Food Facts. It needs an internet connection.';}
+ catch(e){C.err=navigator.onLine===false?'You\'re offline. Comparing needs an internet connection.':'Open Food Facts is busy right now (it limits how often anyone can search). Try again in a minute.';}
  C.loading=false;render();}
 function vCompare(){const p=P();if(!p?.extracted)return vQuick();const C=S.cmp||(S.cmp={tag:'',terms:'',market:(p.markets||[])[0]||'AU'});
  const me={...p,name:p.name||'Your product',brand:p.brand||'',img:thumbOf(p),code:'mine'};const items=C.items||[];const all=[me,...items];
@@ -1041,8 +1045,8 @@ function vCompare(){const p=P();if(!p?.extracted)return vQuick();const C=S.cmp||
  ${C.loading?'<div class="panel small">Searching…</div>':C.err?`<div class="banner warn small">${esc(C.err)}</div>`:''}
  ${C.items&&!C.items.length?'<div class="panel small muted">No similar products with nutrition data found. Try another category or search.</div>':''}
  ${items.length?`${ranks.length?`<div class="panel stack" style="gap:6px"><b>Where your product ranks (per 100 g)</b><span class="small muted">1st = lowest fat, saturated fat, sugars and sodium; highest fibre and protein.</span><div class="row small">${ranks.map(x=>`<span class="chip ${x.r.pos===1?'st-meets':x.r.pos<=Math.ceil(x.r.of/3)?'st-pending':'st-draft'}">${x.l}: ${x.r.pos===1?'best':ord(x.r.pos)} of ${x.r.of}</span>`).join('')}</div></div>`:''}
- <div class="panel" style="overflow-x:auto;padding:0"><table class="cmptab"><thead><tr><th>Product</th>${CMP_COLS.map(([k,l,u])=>`<th class="n">${l}<br><span class="muted">${u}/100 g</span></th>`).join('')}<th>Claims (${esc(marketInfo(C.market).name)}, draft rules)</th></tr></thead><tbody>
- ${all.map(q=>`<tr class="${q===me?'cmpme':''}"><td><div class="row" style="gap:8px;flex-wrap:nowrap">${q.img?`<img src="${esc(q.img)}" alt="" class="cmpimg">`:''}<div><b>${esc(q.name)}</b>${q===me?' <span class="chip st-approved">Yours</span>':''}<div class="small muted">${esc(q.brand)}</div></div></div></td>${CMP_COLS.map(([k])=>`<td class="n mono">${val(q,k)==null?'—':esc(fmt(val(q,k)))}</td>`).join('')}<td class="small">${esc(claimsFor(q,C.market).join(', ')||'—')}</td></tr>`).join('')}
+ <div class="panel" style="overflow-x:auto;padding:0"><table class="cmptab"><thead><tr><th>Product</th>${CMP_COLS.map(([k,l,u])=>`<th class="n">${l}<br><span class="muted">${u}/100 g</span></th>`).join('')}<th>Claimed on pack</th><th>Could claim (${esc(marketInfo(C.market).name)}, draft rules)</th></tr></thead><tbody>
+ ${all.map(q=>`<tr class="${q===me?'cmpme':''}"><td><div class="row" style="gap:8px;flex-wrap:nowrap">${q.img?`<img src="${esc(q.img)}" alt="" class="cmpimg">`:''}<div><b>${esc(q.name)}</b>${q===me?' <span class="chip st-approved">Yours</span>':''}<div class="small muted">${esc(q.brand)}</div></div></div></td>${CMP_COLS.map(([k])=>`<td class="n mono">${val(q,k)==null?'—':esc(fmt(val(q,k)))}</td>`).join('')}<td class="small">${q===me?'<span class="muted">—</span>':(q.onPack||[]).length?esc(q.onPack.join(', ')):'<span class="muted">Not recorded</span>'}</td><td class="small">${esc(claimsFor(q,C.market).join(', ')||'—')}</td></tr>`).join('')}
  </tbody></table></div>`:''}
  <p class="small muted disclaim" style="margin:0">${DISCLAIMER}</p></div>`;}
 document.addEventListener('change',e=>{const s=e.target.closest&&e.target.closest('[data-cmp]');if(!s||!S.cmp)return;S.cmp.market=s.value;render();});
@@ -1366,6 +1370,8 @@ async function prepCanvas(blob,angleDeg=0,mode='adaptive'){const bmp=await creat
  x.fillStyle='#fff';x.fillRect(0,0,W,H);x.imageSmoothingQuality='high';
  if(angleDeg){x.translate(W/2,H/2);x.rotate(angleDeg*Math.PI/180);x.drawImage(bmp,-W/2,-H/2,W,H);x.setTransform(1,0,0,1,0,0);}else x.drawImage(bmp,0,0,W,H);
  const im=x.getImageData(0,0,W,H),d=im.data;const g=new Float32Array(W*H);for(let i=0,j=0;i<d.length;i+=4,j++)g[j]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+ // Light text on a dark panel (e.g. white on brown): flip it so the text is dark, which the reader expects.
+ {let s=0,n=0;for(let j=0;j<g.length;j+=97){s+=g[j];n++;}if(s/n<105)for(let j=0;j<g.length;j++)g[j]=255-g[j];}
  if(mode==='gray'){const sorted=Float32Array.from(g).sort();const lo=sorted[Math.floor(g.length*.02)],hi=sorted[Math.floor(g.length*.98)],span=Math.max(1,hi-lo);
   for(let j=0,k=0;j<g.length;j++,k+=4){const v=Math.max(0,Math.min(255,(g[j]-lo)*255/span));d[k]=d[k+1]=d[k+2]=v;}x.putImageData(im,0,0);return {canvas:c,W,H};}
  // Bradley adaptive threshold using an integral image.
@@ -1433,7 +1439,10 @@ function combineReadings(texts,cols){const ssList=[];for(const t of texts){const
  const pso=tn.some(q=>q.perServeOnly);const cn=pso?[]:cols.map(c=>parseNip(c,ssF?{...ssF}:undefined));const all=[...cn,...tn];if(!all.length)return parseNip([]);
  const base=all.reduce((a,b)=>mergeNip(a,b));const ss=base.servingSize.value;
  for(const {k} of NUTS){const groups=new Map();for(const q of all){const n=q.nutrients[k];if(!n||(n.perServing==null&&n.per100==null))continue;const key=`${n.perServing}|${n.per100}`;const g=groups.get(key)||{n,count:0,score:9};g.count++;const sc=rowScore(n,ss);if(sc<g.score){g.score=sc;g.n=n;}groups.set(key,g);}
-  if(!groups.size)continue;const pick=[...groups.values()].sort((a,b)=>(a.score-0.8*(a.count-1))-(b.score-0.8*(b.count-1)))[0];const n=clone(pick.n);
+  if(!groups.size)continue;
+  // Energy: kJ and kcal pairs both "add up"; Australian and most export panels lead with kJ, so prefer it.
+  const kcalPen=g=>k==='energy_kj'&&g.n.unit==='kcal'&&[...groups.values()].some(x=>x.n.unit==='kJ'&&x.score<=1)?2.5:0;
+  const pick=[...groups.values()].sort((a,b)=>(a.score+kcalPen(a)-0.8*(a.count-1))-(b.score+kcalPen(b)-0.8*(b.count-1)))[0];const n=clone(pick.n);
   if(pick.count>=2&&n.flag?.risky&&pick.score<=3)n.flag.risky=false;base.nutrients[k]=n;}
  return base;}
 // Read the panel by column position: find where the number columns sit across the nutrient rows,
@@ -1460,16 +1469,20 @@ function columnLines(tableLines,numLines,imgW){
  const firstY=Math.min(...rows.map(r=>r.l.bbox.y0));let p100x=null;
  for(const l of tableLines)if(l.bbox.y1<=firstY+5)for(const w of l.words)if(/100/.test(w.text))p100x=(w.bbox.x0+w.bbox.x1)/2;
  if(useful.length===2&&p100x!=null){const near=useful.map(c=>Math.abs(c.cx-p100x));if(near[0]<near[1])useful=[useful[1],useful[0]];}
- const cellFor=(nums,c)=>nums.filter(n=>n.x>=c.xs[0]-gap*1.2&&n.x<=c.max+gap*1.2).sort((a,b)=>Math.abs(a.x-c.cx)-Math.abs(b.x-c.cx))[0]||null;
+ // Energy cells often hold "364 kJ (87 Cal)": take the kJ number in the cell, not the one nearest the edge.
+ const cellFor=(nums,c,k)=>{const inC=nums.filter(n=>n.x>=c.xs[0]-gap*1.2&&n.x<=c.max+gap*1.2);if(k==='energy_kj'){const kj=inC.filter(n=>n.u==='kj');if(kj.length)return kj.sort((a,b)=>Math.abs(a.x-c.cx)-Math.abs(b.x-c.cx))[0];}return inC.sort((a,b)=>Math.abs(a.x-c.cx)-Math.abs(b.x-c.cx))[0]||null;};
  const out=rows.map(r=>{let nums=r.nums;
   // Swap in the numbers-only reading for this row when it found the same number of cells.
   // Each numbers-only line belongs to the one row whose centre is nearest, so close rows can't borrow each other's numbers.
   if(numLines){const cyOf=b=>(b.y0+b.y1)/2;const mine=nl=>{const cy=cyOf(nl.bbox);let best=null,bd=1e9;for(const o of rows){const d=Math.abs(cyOf(o.l.bbox)-cy);if(d<bd){bd=d;best=o;}}return best===r&&bd<=(r.l.bbox.y1-r.l.bbox.y0)*0.6;};
    const alt=numLines.filter(mine).flatMap(nl=>numTokens(nl.words,r.labelEnd));
-   r.alt=useful.map(c=>cellFor(alt,c));}
-  return {text:r.l.text,conf:r.l.conf,cols:useful.map(c=>cellFor(nums,c)),altCols:r.alt||null};});
+   r.alt=useful.map(c=>cellFor(alt,c,r.k));}
+  return {text:r.l.text,conf:r.l.conf,cols:useful.map(c=>cellFor(nums,c,r.k)),altCols:r.alt||null};});
  return out;}
-function cleanNums(s){return String(s).replace(/(\d)\s*¢/g,'$1g').replace(/(\d)i(\d)/g,'$11$2').replace(/(\d)\s*k[)\]}|lI1Jd]/g,'$1kJ').replace(/(\d)\s*k(?=\s|$)/g,'$1kJ')
+function cleanNums(s){return String(s)
+ // "1,957 kJ" / "2,138": a comma with exactly three digits after it is a thousands separator, not a decimal point.
+ .replace(/(^|[^\d.,])([1-9]\d{0,2}),(\d{3})(?=\s*(?:kj|kcal|cal|k\b|mg)|[^\d,.]|$)/gi,'$1$2$3')
+ .replace(/(\d)\s*¢/g,'$1g').replace(/(\d)i(\d)/g,'$11$2').replace(/(\d)\s*[kK][)\]}|lI1Jjdi]/g,'$1kJ').replace(/(\d)\s*K(?=\s|$|[(,])/g,'$1kJ').replace(/(\d)\s*C[eo]l\b/g,'$1Cal').replace(/(\d)\s*k(?=\s|$)/g,'$1kJ')
  // Condensed fonts: a 7 at the start of a number often reads as "T".
  .replace(/(^|[\s(|])T(\d)/g,'$17$2').replace(/(\d)\s*[,·]\s*(\d)/g,'$1.$2').replace(/(\d)[oO]/g,(m,a)=>a+'0').replace(/[oO](\d)/g,(m,a)=>'0'+a).replace(/(\d)[lI|]/g,(m,a)=>a+'1').replace(/[lI|](\d)/g,(m,a)=>'1'+a);}
 // Row names, tolerant of the reader mixing up O/0 and I/l/1.
@@ -1546,10 +1559,16 @@ function hierarchyCheck(nip){const ns=nip.nutrients;for(const [whole,part,wl,pl]
 function inferServing(ns){const r=k=>{const n=ns[k];if(!n||n.perServing==null||!n.per100)return null;return n.perServing/n.per100*100;};
  const e=r('energy_kj'),s=r('sodium_mg');if(e==null)return null;if(e<2||e>500)return null;if(s!=null&&Math.abs(s-e)/e>.06)return null;
  const v=Math.abs(e-Math.round(e))<.3?Math.round(e):Math.round(e*10)/10;return {value:v,unit:'g',inferred:true,from:`${ns.energy_kj.perServing} ÷ ${ns.energy_kj.per100} × 100`};}
-function parseNip(lines,forcedSs){
+// Two tables side by side ("ENERGY 401kJ 2190kJ   CARBOHYDRATE 11.9g 65.1g"): split into one line per nutrient.
+function splitDoubleRows(lines){const out=[];for(const l of lines){const t=String(l.text||'');const pos=[];
+  for(const [k,re] of NUT_MATCH){const g=new RegExp(re.source,re.flags.includes('g')?re.flags:re.flags+'g');let m;while((m=g.exec(t))){pos.push(m.index);if(!m[0].length)g.lastIndex++;}}
+  const starts=[...new Set(pos)].sort((a,b)=>a-b).filter((p,i,a)=>i===0||/\d/.test(t.slice(a[i-1],p)));
+  if(starts.length<2||l.cols){out.push(l);continue;}
+  starts.forEach((s,i)=>out.push({...l,text:t.slice(i===0?0:s,starts[i+1]??t.length)}));}return out;}
+function parseNip(lines,forcedSs){lines=splitDoubleRows(lines||[]);
  const out={nutrients:{},servingSize:forcedSs||{value:null,unit:'g'},servingsPerPack:'',liquid:false};
  const all=cleanNums(lines.map(l=>l.text).join('\n')).replace(/\b(\d) (\d)(?=\s*servings?)/gi,'$1$2');
- const ss=forcedSs?null:(all.match(/serving\s*size[^\d\n]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/per\s*serv(?:ing|e)[\s:(]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/serv(?:ing|e)\s*[:(]?\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/(\d+(?:\.\d+)?)\s*(g|ml)\s*\/\s*[\d.]+\s*(?:oz|fl)/i));if(ss)out.servingSize={value:+ss[1],unit:/ml/i.test(ss[2])?'mL':'g'};
+ const ss=forcedSs?null:(all.match(/serving\s*size[^\d\n]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/per\s*serv(?:ing|e)[\s:(]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/serv(?:ing|e)\s*[:(]?\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/(\d+(?:\.\d+)?)\s*(g|ml)\s*\/\s*[\d.]+\s*(?:oz|fl)/i));if(ss&&+ss[1]>=1)out.servingSize={value:+ss[1],unit:/ml/i.test(ss[2])?'mL':'g'};
  // "140G" in a condensed font reads as "1406": a trailing 6 standing in for the G.
  else if(!forcedSs){const m6=all.match(/serv(?:ing|e)\s*size[^\d\n]*(\d{2,4})6\b(?!\s*(?:g|ml)\b)/i);if(m6)out.servingSize={value:+m6[1],unit:'g',g6:true};}
  const sp=all.match(/((?:about\s*|approx\.?\s*)?\d+(?:\.\d+)?)\s*servings?\s*per\s*(?:package|pack|container)/i)||all.match(/servings?\s*per\s*(?:package|pack|container)[^\d]{0,60}?((?:approx\.?\s*)?\d+(?:\.\d+)?)/i);if(sp)out.servingsPerPack=sp[1];
@@ -1557,8 +1576,10 @@ function parseNip(lines,forcedSs){
  out.glutenNotDetected=/gluten[\s\S]{0,140}?(not\s*detected|nil\s*detected|non\s*rilevato|no\s*detectado|non-?d[ée]tect|not\s*detectable)/i.test(all);
  // US-style "Nutrition Facts" panels give amounts per serving only.
  const perServeOnly=/nutrition\s*facts|amount\s*per\s*serving|daily\s*value/i.test(all)&&!/per\s*100|\/\s*100\s*g/i.test(all);out.perServeOnly=perServeOnly;
- for(const l of lines){const raw=String(l.text);
+ for(const [li,l] of lines.entries()){let raw=String(l.text);
   const hit=NUT_MATCH.find(([k,re])=>re.test(raw));if(!hit)continue;const k=hit[0];
+  // "Energy 96 Cal 332 Cal" with the kJ figures on the line below (or above) without a label: read them together.
+  if(k==='energy_kj'&&!/\d\s*kj/i.test(cleanNums(raw)))for(const nx of [lines[li+1],lines[li-1]]){if(nx&&!NUT_MATCH.some(([kk,re])=>re.test(nx.text))&&/\d\s*kj/i.test(cleanNums(nx.text))){raw=raw+'   '+nx.text;break;}}
   const lm=raw.match(hit[1]);const rest=raw.slice(lm.index+lm[0].length).replace(/^\s*[iIl|]\s?g\b/,' 1g').replace(/^[a-z ,:.\-–]*?(?=[\d\s(<]|$)/i,'');
   const mn=/(^|\s)[MN]\d\s*[g¢]/.test(rest);const t=cleanNums(rest.replace(/(^|\s)[MN](\d)(\s*[g¢])/g,'$111.$2$3'));
   if(out.nutrients[k]&&(out.nutrients[k].per100!=null||out.nutrients[k].perServing!=null))continue;
@@ -1581,7 +1602,8 @@ function parseNip(lines,forcedSs){
    // and keep the dry-mix column too so the claim basis can follow how the food is sold.
    if(toks.length>=3&&out.servingSize.value){const ssz=out.servingSize.value;const fits=(a,b)=>{if(unit==='g'&&k!=='energy_kj'){const pk=pickPair(a,b,ssz);return pk&&pk.fit?(pk.changed?1:2):0;}const e=b.v*ssz/100;return b.v>0&&Math.abs(a.v-e)<=Math.max(e*.15,5)?2:0;};
     let best=null;for(const [i,j] of [[1,2],[0,1],[0,2],[2,3],[1,3]]){if(!toks[i]||!toks[j])continue;const f=fits(toks[i],toks[j]);if(f&&(!best||f>best.f))best={i,j,f};if(f===2)break;}
-    if(best){if(best.i===1){n.dry100=toks[0].v;n.q.dry100=toks[0].lt?'<':null;}toks=[toks[best.i],toks[best.j]];out.multiCol=true;}}
+    // Only a dry-mix column before the pair means "as sold vs prepared"; a skipped middle number is usually % Daily Intake.
+    if(best){if(best.i===1){n.dry100=toks[0].v;n.q.dry100=toks[0].lt?'<':null;out.multiCol=true;}toks=[toks[best.i],toks[best.j]];}}
    n.perServing=toks[0].v;n.per100=toks[1].v;n.q.perServing=toks[0].lt?'<':null;n.q.per100=toks[1].lt?'<':null;
    const ssz=out.servingSize.value;
    // Energy: a 7 read as 1 (or 1 as 7) breaks per serving vs per 100. Try swapping one digit; keep it only if it fits.
@@ -1627,7 +1649,7 @@ async function extract(){const p=P();S.err='';const caps=p.captures||[];
    const ingSrc=[r.text,r.tableText].filter(t=>/ingredient/i.test(t)).sort((a,b)=>(parseIngredients(b).match(/,/g)||[]).length-(parseIngredients(a).match(/,/g)||[]).length)[0]||r.text;if(c.kind==='ingredients'||(c.kind==='any'&&/ingredient/i.test(ingSrc)))ingTexts.push(ingSrc);}
   for(const c of texts){transcript.push(`[Pasted ${c.kind==='nip'?'NIP':'ingredients'} text]\n`+c.text);if(c.kind!=='ingredients')nipLines.push(...c.text.split(/\n/).map(t=>({text:t,conf:null})));if(c.kind==='ingredients'||(c.kind==='any'&&/ingredient/i.test(c.text)))ingTexts.push(c.text);}
   if(caps.some(c=>c.method!=='text'&&c.method!=='sample'&&!imgs.find(x=>x.c.id===c.id)))warnings.push('Some photos are no longer stored on this device, so they were not read.');
-  if(!nipLines.length&&!ingTexts.length)throw {message:'Nothing to read yet. Add a photo or paste the text first.'};
+  if(!nipLines.length&&!ingTexts.length)throw {message:imgs.length?'Couldn\'t find any text in this photo. Crop it to the nutrition panel, or take a closer, straight-on photo.':'Nothing to read yet. Add a photo or paste the text first.'};
   // Combine every reading (normal, table, column, numbers-only, and the extra greyscale/bold readings when the first
   // pass wasn't clean): one serving size for all, then row by row the reading that adds up, preferring agreement.
   const nip=combineReadings([nipLines,tableLines,...extraTables].filter(a=>a.length),[colLines,altLines,...extraCols].filter(a=>a.length));
