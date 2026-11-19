@@ -1548,7 +1548,14 @@ function energyBalanceFix(nip){const ns=nip.nutrients;const en=ns.energy_kj;if(!
   n.perServing=o.ps;n.per100=o.p;}}
 // A part can't be bigger than its whole: carbohydrate ≥ sugars, total fat ≥ saturated fat. If it is, a row borrowed
 // another row's numbers, so flag the whole for checking rather than trust it.
-function hierarchyCheck(nip){const ns=nip.nutrients;for(const [whole,part,wl,pl] of [['carbohydrate_g','sugars_g','Carbohydrate','sugars'],['fat_total_g','fat_saturated_g','Total fat','saturated fat']]){
+function hierarchyCheck(nip){const ns=nip.nutrients;
+ // Protein + fat + carbohydrate (+ fibre) can't be more than 100 g in 100 g. If moving one row's decimal fixes it,
+ // do that (flagged); otherwise flag the rows so a person checks them.
+ {const M=['protein_g','fat_total_g','carbohydrate_g','dietary_fibre_g'];const v=k=>{const n=ns[k];return n&&n.per100!=null&&n.unit==='g'?n.per100:0;};const sum=()=>M.reduce((a,k)=>a+v(k),0);
+  if(sum()>105){const fits=M.filter(k=>v(k)>=10&&sum()-v(k)+v(k)/10<=100);
+   if(fits.length===1){const n=ns[fits[0]];const o=`${n.perServing??'—'} / ${n.per100}`;n.per100=+(n.per100/10).toFixed(2);if(n.perServing!=null)n.perServing=+(n.perServing/10).toFixed(2);
+    n.flag={type:'blurry',status:'open',risky:true,note:`Read as ${o}, which would make protein, fat and carbohydrate add up to more than 100 g per 100 g. The decimal point was probably missed, so PackPick used ${n.perServing??'—'} / ${n.per100}. Check against the pack.`};}
+   else for(const k of M.filter(k=>v(k)>0)){const n=ns[k];n.flag={type:'conflict',status:'open',note:'Protein, fat and carbohydrate add up to more than 100 g per 100 g, so at least one of these numbers is misread. Check this row against the pack.'};}}}for(const [whole,part,wl,pl] of [['carbohydrate_g','sugars_g','Carbohydrate','sugars'],['fat_total_g','fat_saturated_g','Total fat','saturated fat']]){
  const W=ns[whole],P=ns[part];if(!W||!P)continue;
   // The part lost its decimal points (e.g. 12.1 / 8.6 read as 121 / 86)? Shifting both makes it fit inside the whole.
   if(W.perServing!=null&&W.per100!=null&&P.perServing!=null&&P.per100!=null&&(P.per100>W.per100||P.perServing>W.perServing)&&P.per100/10<=W.per100&&P.perServing/10<=W.perServing){
@@ -1589,6 +1596,8 @@ function parseNip(lines,forcedSs){lines=splitDoubleRows(lines||[]);
   // Column reading: cells already know their column, so a lone number keeps its column.
   let single=null;
   if(l.cols){const cs=l.cols;if(cs.length===2&&(!cs[0])!==(!cs[1])){single=cs[0]?'ps':'p100';toks=[cs[0]||cs[1]];}else if(cs.every(Boolean))toks=cs.slice();else toks=cs.filter(Boolean);if(toks.some(x=>x.ld))lostDot=true;}
+  // "1.820 kJ": a dot as thousands separator on energy (no food has 1.8 kJ per 100 g).
+  if(k==='energy_kj')toks=toks.map(x=>/^\d\.\d{3}$/.test(x.s)&&x.u!=='g'?{...x,v:+x.s.replace('.',''),s:x.s.replace('.','')}:x);
   if(k==='energy_kj'){const kj=toks.filter(x=>x.u==='kj');if(kj.length)toks=kj;else{const kc=toks.filter(x=>x.u==='kcal'||x.u==='cal');if(kc.length)toks=kc;}}
   const unit=k==='energy_kj'?(toks[0]&&(toks[0].u==='kcal'||toks[0].u==='cal'||(!toks[0].u&&/calor/i.test(lm[0])))?'kcal':'kJ'):k==='sodium_mg'?(toks.some(x=>x.u==='g')&&!toks.some(x=>x.u==='mg')?'g':'mg'):(toks.some(x=>x.u==='mg')&&!toks.some(x=>x.u==='g')?'mg':'g');
   // Only treat it as a panel row if the name starts the line (not a word inside the ingredient list).
