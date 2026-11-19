@@ -688,10 +688,13 @@ function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
  <div class="qres">
  <div class="stack">
   <h2>Nutrition panel</h2>
+  ${p.extracted.servingSize?.inferred?`<div class="banner small"><b>Serving size worked out from the panel:</b> ${esc(p.extracted.servingSize.value)} g (energy ${esc(p.extracted.servingSize.from)}). The photo's serving size line couldn't be read. Change it above if the pack says otherwise.</div>`:''}
   ${p.extracted.perServeOnly?`<div class="banner small"><b>US-style panel (per serving only).</b> PackPick worked out the per 100 g column from the ${esc(p.extracted.servingSize?.value??'?')} g serving. US panels round small amounts (under 0.5 g shows as 0 g), so confirm exact values from the product spec before using claims that depend on them.</div>`:''}
   ${open.length?`<div class="banner err small"><b>${open.length} number${open.length>1?'s':''} ${open.length>1?'are':'is'} wrong or missing.</b> Fix ${open.length>1?'them':'it'} below (marked in red), or crop the photo to the table and read it again. Claims that use ${open.length>1?'them':'it'} are held back until then.<div class="row" style="margin-top:8px">${(()=>{const c=(p.captures||[]).find(x=>x.method!=='sample'&&x.method!=='text');return c?`<button class="small" data-act="crop" data-id="${c.id}">✂ Crop the photo</button>`:'';})()}</div></div>`:''}
   ${nipPanel(p)}
-  <details ${p.extracted.ingredientsText&&!p.confirmed?'open':''}><summary>Ingredients${p.extracted.ingredientsText?' · check the spelling':' (none found)'}</summary><label class="fld">Used for ingredient claims and “No added sugar”. Fix any misread words.<textarea id="x-ing" data-f="ing">${esc(p.extracted.ingredientsText||'')}</textarea></label>
+  ${!p.extracted.ingredientsText?`<div class="panel stack ingask" style="border:2px solid var(--hl)"><div><b>No ingredients in this photo.</b><div class="small muted">Claims like “Only 6 ingredients”, “No preservatives” and “Made with …” need them.</div></div>
+   ${S.busy==='ing'?`<span class="small">Reading the ingredients…</span>`:`<div class="row"><button class="primary small" data-act="ingCam">Take a photo of the ingredients</button><button class="small" data-act="ingUp">Upload a photo</button><button class="small" data-act="ingType">Type them</button></div>`}</div>`:''}
+  <details id="ingDetails" ${(p.extracted.ingredientsText&&!p.confirmed)||S.ingOpen?'open':''}><summary>Ingredients${p.extracted.ingredientsText?' · check the spelling':' (none found)'}</summary><label class="fld">Used for ingredient claims and “No added sugar”. Fix any misread words.<textarea id="x-ing" data-f="ing">${esc(p.extracted.ingredientsText||'')}</textarea></label>
   <label class="fld" style="padding-bottom:10px;max-width:260px">Whole grain per serving (g), if you know it<input id="wg" class="num" inputmode="decimal" data-f="wg" value="${esc(p.wholegrainPerServing??'')}" placeholder="${(()=>{const e=wgEstimate(p);return e?'≈ '+fmt(e.g)+' from pack %':'not known';})()}"></label></details>
   <details><summary>Photos (${(p.captures||[]).length}) · crop or add more</summary><div class="stack" style="padding-bottom:10px">${(p.captures||[]).map(c=>c.method==='text'?`<div class="textcap">${esc(c.text)}</div>`:`<div class="stack" style="gap:6px">${c.method!=='sample'?`<div><button class="small" data-act="crop" data-id="${c.id}">✂ Crop and read again</button></div>`:''}${capSrc(c)?`<img src="${esc(capSrc(c))}" alt="Pack photo" style="border-radius:8px;border:1px solid var(--line)">`:'<span class="small muted">Loading photo…</span>'}</div>`).join('')}<div class="row"><button class="small" data-act="qAddCam">Add another photo</button><button class="small" data-act="qAddUp">Add from device</button></div></div></details>
   ${p.confirmed?`<div class="row">${chip('meets','All numbers check out')}</div>`:''}
@@ -717,7 +720,14 @@ async function newQuickProduct(sample){const id=uid();const d=new Date();
   captures:[],evidence:[],evidenceChecks:{},reference:null,markets:qMarkets(),confirmed:false,createdAt:now(),createdBy:S.me.id||null};
  S.pid=id;S.qMk=false;await saveProduct(p);return p;}
 async function runQuick(){S.view='quick';S.err='';render();await extract();if(!S.err&&P()?.extracted){S.view='result';window.scrollTo(0,0);}render();}
+// Read just an ingredients photo and fill the ingredients, leaving the nutrition numbers as they are.
+async function readIngredientsPhoto(file,method){const p=P();S.pickMode=null;S.busy='ing';render();
+ try{await addCapture('ingredients',method,file);const c=P().captures[P().captures.length-1];const b=S.mem[c.id]?.blob||file;const r=await ocr(b,()=>{});
+  const src=/ingredient/i.test(r.text)?r.text:(/ingredient/i.test(r.tableText)?r.tableText:r.text);const t=parseIngredients(src);const q=P();
+  if(t){q.extracted.ingredientsText=t;S.ingOpen=true;touch(q,false);toast('Ingredients added. Check the spelling.');}else toast('No ingredients found in that photo. Try a closer photo, crop it, or type them.');}
+ catch(e){toast(e.message||'Couldn\'t read that photo.');}finally{S.busy='';render();}}
 async function handlePicked(files,method){files=files.filter(Boolean);if(!files.length)return;
+ if(S.pickMode==='ing')return readIngredientsPhoto(files[0],method);
  if(S.pickMode==='quick'||S.pickMode==='quickAdd'){const fresh=S.pickMode==='quick';S.pickMode=null;if(fresh)await newQuickProduct(false);for(const f of files)await addCapture('any',method,f);return runQuick();}
  for(const f of files)await addCapture(S.pickKind,method,f);}
 
@@ -804,13 +814,17 @@ function pickPair(A,B,ss){let best=null;
 function rowScore(n,ss){if(!n)return 9;if(n.perServing==null&&n.per100==null)return 8;if(n.perServing==null||n.per100==null)return 6;
  let s=n.flag?(n.flag.type==='blurry'?1:4):0;if(ss&&n.unit!=='kJ'){const e=n.per100*ss/100,tol=Math.max(e*.2,n.unit==='mg'?5:.15);if(Math.abs(n.perServing-e)>tol)s+=5;}return s;}
 function mergeNip(a,b){if(!b)return a;const out={...a,nutrients:{}};
- if(a.servingSize.value==null&&b.servingSize.value!=null)out.servingSize=b.servingSize;if(!a.servingsPerPack&&b.servingsPerPack)out.servingsPerPack=b.servingsPerPack;out.liquid=a.liquid||b.liquid;out.perServeOnly=a.perServeOnly||b.perServeOnly;
+ if((a.servingSize.value==null||a.servingSize.inferred)&&b.servingSize.value!=null&&!(b.servingSize.inferred&&a.servingSize.value!=null))out.servingSize=b.servingSize;if(!a.servingsPerPack&&b.servingsPerPack)out.servingsPerPack=b.servingsPerPack;out.liquid=a.liquid||b.liquid;out.perServeOnly=a.perServeOnly||b.perServeOnly;
  const ss=out.servingSize.value;for(const {k} of NUTS){const x=a.nutrients[k],y=b.nutrients[k];const sx=rowScore(x,ss),sy=rowScore(y,ss);const pick=sy<sx?y:x;if(pick)out.nutrients[k]=pick;}
  return out;}
-function parseNip(lines){
- const out={nutrients:{},servingSize:{value:null,unit:'g'},servingsPerPack:'',liquid:false};
+// Serving size from the panel itself: per-serving ÷ per-100 g for energy, checked against sodium.
+function inferServing(ns){const r=k=>{const n=ns[k];if(!n||n.perServing==null||!n.per100)return null;return n.perServing/n.per100*100;};
+ const e=r('energy_kj'),s=r('sodium_mg');if(e==null)return null;if(e<2||e>500)return null;if(s!=null&&Math.abs(s-e)/e>.06)return null;
+ const v=Math.abs(e-Math.round(e))<.3?Math.round(e):Math.round(e*10)/10;return {value:v,unit:'g',inferred:true,from:`${ns.energy_kj.perServing} ÷ ${ns.energy_kj.per100} × 100`};}
+function parseNip(lines,forcedSs){
+ const out={nutrients:{},servingSize:forcedSs||{value:null,unit:'g'},servingsPerPack:'',liquid:false};
  const all=cleanNums(lines.map(l=>l.text).join('\n')).replace(/\b(\d) (\d)(?=\s*servings?)/gi,'$1$2');
- const ss=all.match(/serving\s*size[^\d\n]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/per\s*serv(?:ing|e)[\s:(]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/serv(?:ing|e)\s*[:(]?\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i);if(ss)out.servingSize={value:+ss[1],unit:/ml/i.test(ss[2])?'mL':'g'};
+ const ss=forcedSs?null:(all.match(/serving\s*size[^\d\n]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/per\s*serv(?:ing|e)[\s:(]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/serv(?:ing|e)\s*[:(]?\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/(\d+(?:\.\d+)?)\s*(g|ml)\s*\/\s*[\d.]+\s*(?:oz|fl)/i));if(ss)out.servingSize={value:+ss[1],unit:/ml/i.test(ss[2])?'mL':'g'};
  const sp=all.match(/((?:about\s*|approx\.?\s*)?\d+(?:\.\d+)?)\s*servings?\s*per\s*(?:package|pack|container)/i)||all.match(/servings?\s*per\s*(?:package|pack|container)[^\d\n]*((?:approx\.?\s*)?\d+(?:\.\d+)?)/i);if(sp)out.servingsPerPack=sp[1];
  if(/per\s*100\s*ml/i.test(all))out.liquid=true;
  // US-style "Nutrition Facts" panels give amounts per serving only.
@@ -825,7 +839,7 @@ function parseNip(lines){
   if(/per\s*100/i.test(t))toks=toks.filter(x=>x.v!==100);
   if(k==='energy_kj'){const kj=toks.filter(x=>x.u==='kj');if(kj.length)toks=kj;else{const kc=toks.filter(x=>x.u==='kcal'||x.u==='cal');if(kc.length)toks=kc;}}
   const unit=k==='energy_kj'?(toks[0]&&(toks[0].u==='kcal'||toks[0].u==='cal'||(!toks[0].u&&/calor/i.test(lm[0])))?'kcal':'kJ'):k==='sodium_mg'?(toks.some(x=>x.u==='g')&&!toks.some(x=>x.u==='mg')?'g':'mg'):(toks.some(x=>x.u==='mg')&&!toks.some(x=>x.u==='g')?'mg':'g');
-  const n={unit,perServing:null,per100:null,flag:null};
+  const n={unit,perServing:null,per100:null,flag:null,labelSeen:true};
   if(perServeOnly&&toks.length){const ssz=out.servingSize.value;n.perServing=toks[0].v;n.per100=ssz?+fmt(toks[0].v*100/ssz,2):null;n.derived=true;}
   else if(toks.length>=2){n.perServing=toks[0].v;n.per100=toks[1].v;
    const ssz=out.servingSize.value;
@@ -838,6 +852,7 @@ function parseNip(lines){
   if(!n.flag&&lostDot)n.flag={type:'blurry',note:'A decimal point looked missing (e.g. "09" read as 0.9). Check against the pack.',status:'open'};
   if(!n.flag&&l.conf!=null&&l.conf<75)n.flag={type:'blurry',note:`The photo reader was only ${Math.round(l.conf)}% sure about this line.`,status:'open'};
   out.nutrients[k]=n;}
+ if(out.servingSize.value==null&&!forcedSs&&!out.perServeOnly){const inf=inferServing(out.nutrients);if(inf)return parseNip(lines,inf);}
  return out;}
 function parseIngredients(text){const t=String(text).replace(/\r/g,'');const m=t.match(/ingredients?\s*[:\-.]?\s*([\s\S]*)/i);let s=m?m[1]:t;
  s=s.replace(/\n\s*\n/g,'\n').split(/\b(?:contains|allergens?|may contain|may be present|manufactured|nutrition\s+(?:information|facts)|\d*\s*servings?\s+per|serving\s+size|ave\.?\s+quantity|average\s+quantity|amount\s+per|store\s+in|best\s+before|made\s+in|packed\s+in|product\s+of)\b/i)[0];
@@ -868,7 +883,7 @@ async function extract(){const p=P();S.err='';const caps=p.captures||[];
 const MANDATORY_NIP=['energy_kj','protein_g','fat_total_g','fat_saturated_g','carbohydrate_g','sugars_g','sodium_mg'];
 function autoAccept(p){const x=p.extracted,ss=num(x.servingSize?.value),iss=issuesFor(p);
  for(const {k,label} of NUTS){const n=x.nutrients[k];if(!n||!n.flag||n.flag.status!=='open')continue;const i=iss[k];const nm=label.replace('– ','').toLowerCase();const both=n.perServing==null&&n.per100==null;
-  if(both){if(!MANDATORY_NIP.includes(k)){n.flag={...n.flag,status:'auto',note:'Not on this pack.'};}else n.flag={type:'missing',status:'open',orig:n.flag.orig,note:`No ${nm} found on the photo. Type it in from the pack.`};continue;}
+  if(both){if(!MANDATORY_NIP.includes(k)&&!n.labelSeen){n.flag={...n.flag,status:'auto',note:'Not on this pack.'};}else n.flag={type:'missing',status:'open',orig:n.flag.orig,note:n.labelSeen?`The ${nm} row is on the pack but its numbers couldn't be read. Type them in.`:`No ${nm} found on the photo. Type it in from the pack.`};continue;}
   if(n.per100==null){n.flag={type:'missing',status:'open',orig:n.flag.orig,note:`The per 100 g ${nm} wasn't found. Type it in from the pack.`};continue;}
   if(n.perServing==null){n.flag={type:'missing',status:'open',orig:n.flag.orig,note:`Only one ${nm} number was found, so PackPick can't tell which column it belongs to. Type both numbers from the pack.`};continue;}
   if(i&&i.type==='conflict'){n.flag={type:'conflict',status:'open',orig:n.flag.orig,note:i.note+' Type the right number from the pack.'};continue;}
@@ -899,6 +914,9 @@ document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-ac
  case 'cropReset':S.cropRect={x:4,y:4,w:92,h:92};break;
  case 'cropApply':return applyCrop();
  case 'cropOrig':{const c=(p.captures||[]).find(x=>x.id===S.cropId);if(c&&c.origAssetId){c.assetId=c.origAssetId;c.cropped=false;delete S.mem[c.id];S.cropRect={x:4,y:4,w:92,h:92};await saveProduct(p);}break;}
+ case 'ingCam':S.pickMode='ing';$('#fileCam').click();return;
+ case 'ingUp':S.pickMode='ing';$('#fileUp').click();return;
+ case 'ingType':S.ingOpen=true;render();{const d=$('#ingDetails');if(d){d.open=true;d.scrollIntoView({block:'center'});}$('#x-ing')?.focus();}return;
  case 'ackAll':{const iss=issuesFor(p);let left=0;for(const {k} of openFlags(p)){const i=iss[k];if(i&&i.type!=='missing'){left++;continue;}const f=p.extracted.nutrients[k].flag;f.status='acknowledged';f.by=S.me.id||null;f.at=now();}touch(p);if(left)toast(`${left} row${left>1?'s':''} still don't add up. Type the number from the pack.`);return;}
  case 'qBreakdown':S.view='breakdown';window.scrollTo(0,0);break;
  case 'openFull':S.view='product';S.step=b.dataset.s;window.scrollTo(0,0);break;
@@ -968,7 +986,7 @@ document.addEventListener('change',ev=>{const t=ev.target;const f=t.dataset.f;if
  if(f==='det'){let v=t.value;if(t.dataset.k==='usRaccG')v=num(v);p[t.dataset.k]=v;const data=['physical','usRaccG','categoryKind'].includes(t.dataset.k);touch(p,data);return;}
  const x=p.extracted;
  if(f==='nut'){const n=x.nutrients[t.dataset.k]=x.nutrients[t.dataset.k]||{unit:NUT[t.dataset.k].unit};if(t.dataset.c==='unit')n.unit=t.value;else{const raw=t.value.trim().replace(',','.');const v=raw===''?null:num(raw);if(raw!==''&&v===null){toast('Enter a number, or leave blank for missing.');render();return;}n[t.dataset.c]=v;}mergeFlags(p,t.dataset.k);autoAccept(p);touch(p);return;}
- if(f==='ss'){x.servingSize={...(x.servingSize||{}),value:num(t.value)};mergeFlags(p,null);autoAccept(p);touch(p);return;}
+ if(f==='ss'){x.servingSize={...(x.servingSize||{}),value:num(t.value),inferred:false};mergeFlags(p,null);autoAccept(p);touch(p);return;}
  if(f==='ssu'){x.servingSize={...(x.servingSize||{}),unit:t.value};touch(p);return;}
  if(f==='spp'){x.servingsPerPack=t.value;touch(p);return;}
  if(f==='ing'){x.ingredientsText=t.value;touch(p);return;}
