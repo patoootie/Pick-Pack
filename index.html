@@ -194,6 +194,11 @@ button.qopt:hover{border-color:var(--ink)}
 .trtab td{padding:7px 4px;border-bottom:1px solid var(--line)}
 .scanbox{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3}.scanbox video{width:100%;height:100%;object-fit:cover;display:block}
 .scanline{position:absolute;left:10%;right:10%;top:50%;height:2px;background:var(--hl);box-shadow:0 0 8px var(--hl)}
+.jobrow{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:10px 0;font-weight:400;min-height:auto}
+.phead{display:flex;gap:12px;align-items:center;padding:10px}.phead img{width:64px;height:64px;object-fit:cover;border-radius:8px;flex:none}.phname{font-size:1.15rem;line-height:1.25}
+.dbtag{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--needs,#c98a1b);border:1px solid currentColor;border-radius:4px;padding:0 4px;margin-left:6px;vertical-align:middle}
+.cmptab{border-collapse:collapse;width:100%;font-size:.85rem;min-width:760px}.cmptab th,.cmptab td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}.cmptab .n{text-align:right;white-space:nowrap}
+.cmpme td{background:color-mix(in srgb,var(--hl) 14%,transparent)}.cmpimg{width:36px;height:36px;object-fit:cover;border-radius:6px;flex:none}
 .qtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;max-width:560px;width:100%;margin:8px auto 4px}
 .qtile{display:flex;flex-direction:column;align-items:center;gap:8px;background:none;border:0;padding:6px 0;font-weight:600;font-size:.9rem;color:var(--ink);min-height:auto}
 .qcirc{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;transition:transform .15s}.qtile:active .qcirc{transform:scale(.94)}
@@ -526,14 +531,14 @@ function touch(p,unconfirm=true){if(unconfirm&&p.confirmed){p.confirmed=false;}s
 /* ---------- render ---------- */
 function render(){
  const ae=document.activeElement,keep=ae&&ae.id&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName)?{id:ae.id,v:ae.value,s:ae.selectionStart,e:ae.selectionEnd}:null;
- document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current',b.dataset.v===({product:'products',result:'quick',breakdown:'quick',crop:'quick',import:'quick',importDone:'products'}[S.view]||S.view)?'page':'false'));
+ document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current',b.dataset.v===({product:'products',result:'quick',breakdown:'quick',crop:'quick',import:'quick',importDone:'products',job:'products',scan:'quick',compare:'quick'}[S.view]||S.view)?'page':'false'));
  let h='';
  const nv0=document.querySelector('nav.tabs');if(nv0){nv0.classList.toggle('open',!!S.more);$('#moreBtn').setAttribute('aria-expanded',String(!!S.more));}
  // Don't rebuild the scanner while the camera is running, or the video would stop.
  if(S.view==='scan'&&scanCtl&&$('#scanVideo'))return;
  const wb=$('#whoBtn');if(wb)wb.textContent=(S.me.id||'Set your name')+(S.role==='qa'?' · QA':'');
  if(S.dbMissing)h+=`<div class="banner warn" style="margin-bottom:14px"><b>This browser can't save PackPick data.</b> It may be in private mode or have site storage turned off. Open PackPick in a normal browser window.</div>`;
- h+=({products:vProducts,product:vProduct,markets:vMarkets,rules:vRules,guide:vGuide,data:vData,settings:vSettings,quick:vQuick,result:vResult,breakdown:vBreakdown,crop:vCrop,import:vImport,importDone:vImportDone,translate:vTranslate,scan:vScan}[S.view]||vQuick)();
+ h+=({products:vProducts,product:vProduct,markets:vMarkets,rules:vRules,guide:vGuide,data:vData,settings:vSettings,quick:vQuick,result:vResult,breakdown:vBreakdown,crop:vCrop,import:vImport,importDone:vImportDone,translate:vTranslate,scan:vScan,job:vJob,compare:vCompare}[S.view]||vQuick)();
  $('#main').innerHTML=h;
  if(keep){const el=document.getElementById(keep.id);if(el){el.focus();if('value' in el&&el.value!==keep.v&&el.type!=='file')el.value=keep.v;try{el.setSelectionRange(keep.s,keep.e)}catch(e){}}}}
 function loadingOr(k,html){return S.loaded[k]||S.dbMissing?html:`<p class="muted">Loading…</p>`;}
@@ -543,12 +548,16 @@ function vProducts(){
  return `<div class="stack">
  <div class="spread"><div><h1>Saved checks</h1><p class="muted small" style="margin:4px 0 0">Every pack you've checked, newest first. Tap one to see its results again.</p></div>
  <div class="row"><button class="primary" data-act="nav" data-v="quick">Check a pack</button><button data-act="newProduct">Add a product by hand</button>${ps.length?`<button class="ghost" data-act="clearAsk">Clear all</button>`:''}</div></div>
+ ${(()=>{const jobs=ps.filter(p=>p.job);if(!jobs.length)return '';const q=jobs.filter(p=>['ready','rereview'].includes(jobStatus(p)));const ch=jobs.filter(p=>jobStatus(p)==='changes');
+  const row=p=>`<button class="ocrow jobrow" data-act="openJob" data-id="${p.id}"><div class="spread"><b>${esc(p.name||'Job')}</b>${jobChip(p)}</div><div class="small muted">${esc(marketInfo(p.job.market).name)} · SKU ${esc(p.sku||'—')} · ${esc(JOB_NEXT[jobStatus(p)])}</div><div class="small" style="color:var(--fails)">${esc(jobBlockers(p,true)[0]||'')}</div></button>`;
+  return `<div class="panel stack"><h2 style="margin:0">Packaging jobs</h2>${q.length?`<div class="small"><b>QA queue (${q.length})</b></div>${q.map(row).join('')}`:'<div class="small muted">Nothing waiting for QA.</div>'}${ch.length?`<div class="small"><b>Changes requested (${ch.length})</b></div>${ch.map(row).join('')}`:''}
+  <details><summary class="small">All jobs (${jobs.length})</summary>${jobs.map(row).join('')}</details></div>`;})()}
  ${S.confirmClear?`<div class="banner err stack" style="gap:8px"><b>Delete all ${ps.length} saved check${ps.length===1?'':'s'} and their photos from this device?</b><span class="small">This can't be undone. Download a backup first if you might need them. Market rules and the approval log are kept.</span>
   <div class="row"><button class="small" data-act="nav" data-v="data">Back up first</button><button class="small primary" data-act="clearYes">Delete all</button><button class="small ghost" data-act="clearNo">Cancel</button></div></div>`:''}
  ${loadingOr('p',ps.length?`<div class="plist">${ps.map(p=>{const aps=Object.values(S.approvals).filter(a=>a.productId===p.id&&a.status==='approved').length;const th=thumbOf(p);
   return `<button class="panel pcard" data-act="open" data-id="${p.id}">${th?`<img class="pthumb" src="${esc(th)}" alt="">`:''}<div class="stack" style="gap:6px;min-width:0;flex:1"><div class="spread"><span class="label">${esc(p.brand||p.company||'No brand')}</span>${p.sample?'<span class="chip sample">SAMPLE DATA</span>':''}</div>
   <h3>${esc(p.name||'Untitled product')}</h3><div class="small muted mono">SKU ${esc(p.sku||'—')} · Pack ${esc(p.packVersion||'—')}</div>
-  <div class="row small">${p.confirmed?chip('meets','Values confirmed'):chip('needs','Values not confirmed')}<span class="muted">${(p.markets||[]).length} market${(p.markets||[]).length===1?'':'s'}</span><span class="muted">${aps} approved claim${aps===1?'':'s'}</span></div></div></button>`}).join('')}</div>`
+  <div class="row small">${p.job?jobChip(p)+`<span class="muted">${esc(marketInfo(p.job.market).name)}${p.job.owner?' · '+esc(p.job.owner):''}</span>`:(p.confirmed?chip('meets','Values confirmed'):chip('needs','Values not confirmed'))+`<span class="muted">${(p.markets||[]).length} market${(p.markets||[]).length===1?'':'s'}</span><span class="muted">${aps} approved claim${aps===1?'':'s'}</span>`}</div></div></button>`}).join('')}</div>`
   :`<div class="panel"><h3>No products yet</h3><p class="muted">Add a product to start, or run the SAMPLE demo with an invented rice crispbread. Sample results are always labelled and can never be approved.</p></div>`)}
  </div>`;}
 
@@ -593,7 +602,7 @@ function sCapture(p){const zone=(kind,title,hint)=>`<div class="panel stack"><di
 
 function nipRows(p){const x=p.extracted||{nutrients:{}},lab=per100Label(p);return NUTS.map(({k,label,unit})=>{const n=x.nutrients[k]||{unit,perServing:null,per100:null};const f=n.flag;const open=f?.status==='open';
   const has=n.perServing!=null||n.per100!=null;
-  const mark=!open&&has&&p.extracted.servingSize?.value!=null?`<span class="okmark" title="${f?.status==='corrected'?'Corrected and checked':'Adds up'}">✓</span>`:'';
+  const mark=n.db&&p.offLookup&&!p.offChecked?`<span class="dbtag" title="From Open Food Facts, not checked against the pack">database</span>`:!open&&has&&p.extracted.servingSize?.value!=null?`<span class="okmark" title="${f?.status==='corrected'?'Corrected and checked':'Adds up'}">✓</span>`:'';
   const sub=open?`<tr class="flagrow"><td colspan="4"><div class="flagline"><span><b>${{blurry:'Can\'t double-check',missing:'Not found',conflict:'Doesn\'t add up'}[f.type]}:</b> ${esc(f.note)}</span><button class="mini" data-act="ack" data-k="${k}">${f.type==='missing'?'Not on the pack':'The pack says this'}</button></div></td></tr>`:'';
   const shown=c=>n[c]==null?'':(n.q?.[c]==='<'?'<':'')+n[c];const tip=c=>n.q?.[c]==='~0'?` title="Printed as 0 on a US panel, which means less than ${US_ZERO_BOUND[k]} ${NUT[k].unit}"`:n.q?.[c]==='<'?' title="Printed as less than this value"':'';
   return `<tr class="${open?'flag-open':''}"><td>${label}${mark}</td><td class="n"><input id="n-${k}-ps" class="num" inputmode="decimal" data-f="nut" data-k="${k}" data-c="perServing" value="${esc(shown('perServing'))}"${tip('perServing')} placeholder="—" aria-label="${label} per serving"></td>
@@ -843,14 +852,16 @@ function vQuick(){
  ${S.qText?`<div class="panel stack"><label class="fld">Nutrition panel (and ingredients, if you have them)<textarea id="q-text" style="min-height:190px" placeholder="Serving size 12 g&#10;Energy 194 kJ 1615 kJ&#10;Protein 0.9 g 7.6 g&#10;Fat, total 0.3 g 2.6 g&#10;…&#10;Ingredients: …"></textarea></label><div class="row"><button class="primary" data-act="qTextGo">Check claims</button><button class="ghost" data-act="qTextClose">Cancel</button></div></div>`:''}
  ${recent.length?`<div class="stack" style="gap:8px"><div class="spread"><h2 style="margin:0">Recent checks</h2><button class="ghost small" data-act="nav" data-v="products">See all</button></div>
   <div class="rgrid">${recent.map(p=>{const o=openFlags(p).length;let top='';try{const t=quickTop(p,p.markets||['AU']);top=t.list[0]?.best?.wording||'';}catch(e){}
-   const th=thumbOf(p);return `<button class="panel rcard" data-act="open" data-id="${p.id}">${th?`<img class="rthumb" src="${esc(th)}" alt="">`:`<span class="rthumb rthumb-none" aria-hidden="true">≡</span>`}<b>${esc(p.name||'Pack check')}</b><span class="small muted">${esc(top||'No claim yet')}</span>${o?`<span class="small" style="color:var(--fails)">${o} to fix</span>`:''}</button>`;}).join('')}</div></div>`:''}
+   const th=thumbOf(p);return `<button class="panel rcard" data-act="open" data-id="${p.id}">${th?`<img class="rthumb" src="${esc(th)}" alt="">`:`<span class="rthumb rthumb-none" aria-hidden="true">≡</span>`}<b>${esc(p.name||'Pack check')}</b><span class="small muted">${esc(p.job?(jobClaim(p)?.r.wording||'No claim chosen'):(top||'No claim yet'))}</span><span>${p.job?jobChip(p):top?chip('draft','Proposed · not approved'):''}</span>${o?`<span class="small" style="color:var(--fails)">${o} to fix</span>`:''}</button>`;}).join('')}</div></div>`:''}
  </div>`;}
 function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
  if(!(p.markets||[]).length)p.markets=['AU'];const codes=p.markets;const t=quickTop(p,codes);const open=openFlags(p);
  const unver=t.ms.filter(m=>!m.verified).map(m=>m.name);
  return `<div class="stack">
- <div class="spread"><button class="ghost" data-act="qNew">← Check another pack</button>${p.sample?'<span class="chip sample">SAMPLE DATA</span>':''}${p.barcode?`<span class="small muted mono">${esc(p.barcode)}</span>`:`<button class="ghost small" data-act="scanLink">Link barcode</button>`}</div>
- ${p.offLookup?`<div class="banner warn small"><b>From Open Food Facts</b> (public, crowd-sourced). Check every value against the pack before relying on it.</div>`:''}
+ <div class="spread"><button class="ghost" data-act="qNew">← Check another pack</button>${p.sample?'<span class="chip sample">SAMPLE DATA</span>':''}${p.barcode?'':`<button class="ghost small" data-act="scanLink">Link barcode</button>`}</div>
+ ${(()=>{const th=thumbOf(p);return `<div class="panel phead">${th?`<img src="${esc(th)}" alt="">`:''}<div class="stack" style="gap:2px;min-width:0"><span class="label">${esc(p.brand||'')}</span><b class="phname">${esc(p.name||'Pack check')}</b>${p.barcode?`<span class="small muted mono">Barcode ${esc(p.barcode)}</span>`:''}${p.offLookup?`<span class="small">${p.offChecked?chip('meets','Checked against your photo'):chip('needs','From Open Food Facts · not checked')}</span>`:''}</div></div>`;})()}
+ ${p.offLookup&&!p.offChecked?`<div class="banner warn small"><b>Is this the product in your hand?</b> These numbers come from Open Food Facts, a public database anyone can edit. They can belong to an older recipe, or even a different product.<div class="row" style="margin-top:8px"><button class="small primary" data-act="offCheck">Photograph the panel to check</button><button class="small" data-act="offCheckUp">Upload a photo</button></div></div>`:''}
+ ${p.offDiff?`<div class="banner ${p.offDiff.length?'err':''} small"><b>${p.offDiff.length?(()=>{const u=p.offDiff.filter(d=>/^unclear/.test(d.photo)).length,r=p.offDiff.length-u;return `${r} difference${r===1?'':'s'} between the database and your photo${u?`, and ${u} row${u>1?'s':''} the photo couldn't read clearly`:''}.`;})():'Your photo matches the database.'}</b>${p.offDiff.length?` The numbers below now come from your photo.<ul style="margin:4px 0 0 18px;padding:0">${p.offDiff.map(d=>`<li>${esc(d.label)}: database <s>${esc(d.db)}</s> → pack <b>${esc(d.photo)}</b></li>`).join('')}</ul>`:''}</div>`:''}
  <div class="qres">
  <div class="stack">
   <h2>Nutrition panel</h2>
@@ -885,7 +896,8 @@ function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
    :`<div class="panel"><b>${t.preview?'No claim would pass the draft rules.':'No nutrition claim qualifies.'}</b><p class="small muted" style="margin:4px 0 0">${open.length?'Fix the numbers marked in red first.':t.preview?'Rules for the selected markets are still pending.':'With these numbers, none of the checked nutrition claims qualify in the selected markets with verified rules.'}</p></div>`}
   ${otherCalloutsHtml(p,codes)}
   ${vAllergens(p)}
-  <button class="primary big" data-act="qBreakdown">See breakdown</button>
+  <button class="big" data-act="cmpOpen">Compare with similar products</button>
+  <div class="row"><button class="primary big" data-act="qBreakdown" style="flex:1">See breakdown</button><button class="big" data-act="jobOpen" style="flex:1">${p.job?'Open job ':'Make packaging job'}${p.job?jobChip(p):''}</button></div>
   <p class="small muted disclaim" style="margin:0">${DISCLAIMER}</p>
  </div></div></div>`;}
 const DISCLAIMER='Internal guidance only, not regulatory approval. Always independently double-check the latest official rules for each intended market, the product data, calculations, exact wording and required declarations. Do not use a claim on packaging until QA signs off.';
@@ -935,7 +947,20 @@ async function readIngredientsPhoto(file,method){const p=P();S.pickMode=null;S.b
   {const st=allergenStatements(r.text+'\n'+r.tableText);if(st.contains)q.extracted.containsText=[q.extracted.containsText,st.contains].filter(Boolean).join('; ');if(st.may)q.extracted.mayContainText=[q.extracted.mayContainText,st.may].filter(Boolean).join('; ');}
   if(t){q.extracted.ingredientsText=t;S.ingOpen=true;touch(q,false);toast('Ingredients added. Check the spelling.');}else toast('No ingredients found in that photo. Try a closer photo, crop it, or type them.');}
  catch(e){toast(e.message||'Couldn\'t read that photo.');}finally{S.busy='';render();}}
+// Check database values against a photo of the real panel: the photo wins, and every difference is listed.
+async function offCheckPhoto(file,method){const p=P();if(!p)return;const before=clone(p.extracted);
+ await addCapture('nip',method,file);S.view='quick';S.err='';render();await extract();const q=P();
+ if(S.err||!q.extracted){toast(S.err||'Couldn\'t read that photo.');q.extracted=before;S.err='';S.view='result';await saveProduct(q);render();return;}
+ const diff=[];const ssA=before.servingSize?.value,ssB=q.extracted.servingSize?.value;if(ssA!=null&&ssB!=null&&+ssA!==+ssB)diff.push({label:'Serving size',db:ssA+' g',photo:ssB+' g'});
+ for(const {k,label} of NUTS){const a=before.nutrients?.[k],b=q.extracted.nutrients?.[k];if(!a||!b)continue;
+  const unclear=b.flag?.status==='open';
+  if(unclear){diff.push({label:label.replace('– ',''),db:`${a.perServing==null?'—':fmt(a.perServing)} / ${a.per100==null?'—':fmt(a.per100)} ${a.unit}`,photo:'unclear in the photo: type it from the pack'});continue;}
+  for(const [c,cl] of [['perServing','per serving'],['per100','per 100 g']]){const va=a[c],vb=b[c];if(vb==null)continue;
+   if(va==null)diff.push({label:`${label.replace('– ','')} ${cl}`,db:'missing',photo:`${fmt(vb)} ${b.unit}`});
+   else if(Math.abs(va-vb)>Math.max(0.051,Math.abs(vb)*0.01))diff.push({label:`${label.replace('– ','')} ${cl}`,db:`${fmt(va)} ${a.unit}`,photo:`${fmt(vb)} ${b.unit}`});}}
+ q.offChecked=true;q.offDiff=diff;q.dbExtracted=before;await saveProduct(q);S.view='result';window.scrollTo(0,0);render();}
 async function handlePicked(files,method){files=files.filter(Boolean);if(!files.length)return;
+ if(S.pickMode==='offCheck'){S.pickMode=null;return offCheckPhoto(files[0],method);}
  if(S.pickMode==='ing')return readIngredientsPhoto(files[0],method);
  if(S.pickMode==='quick'||S.pickMode==='quickAdd'){const fresh=S.pickMode==='quick';S.pickMode=null;if(fresh)await newQuickProduct(false);for(const f of files)await addCapture('any',method,f);
   // One new photo: show it first so it can be cropped to the table (and warn about blur or glare) before reading.
@@ -975,6 +1000,127 @@ async function applyCrop(){const p=P();const c=(p.captures||[]).find(x=>x.id===S
  S.mem[c.id]={blob:out,url:URL.createObjectURL(out)};c.quality=await photoQuality(out);try{c.assetId=await storeBlob(out);}catch(e){}c.cropped=true;S.cropId=null;S.cropRect=null;S.cropFirst=false;
  await saveProduct(p);return runQuick();}
 
+/* ---------- compare with similar products on the market (Open Food Facts, Australia) ---------- */
+const CMP_CATS=[['Crispbreads','en:crispbreads'],['Crackers','en:crackers'],['Rice cakes','en:rice-cakes'],['Yoghurts','en:yogurts'],['Breakfast cereals','en:breakfast-cereals'],['Biscuits','en:biscuits'],['Cereal bars','en:cereal-bars'],['Crisps','en:crisps']];
+const CMP_COLS=[['energy_kj','Energy','kJ',0],['fat_total_g','Fat','g',-1],['fat_saturated_g','Sat. fat','g',-1],['sugars_g','Sugars','g',-1],['sodium_mg','Sodium','mg',-1],['dietary_fibre_g','Fibre','g',1],['protein_g','Protein','g',1]];
+function offToLite(o){const N=o.nutriments||{};const ss=num(o.serving_quantity);const nut={};
+ const map={energy_kj:['energy-kj',1],protein_g:['proteins',1],fat_total_g:['fat',1],fat_saturated_g:['saturated-fat',1],carbohydrate_g:['carbohydrates',1],sugars_g:['sugars',1],dietary_fibre_g:['fiber',1],sodium_mg:['sodium',1000]};
+ for(const [k,[key,f]] of Object.entries(map)){let b=N[key+'_100g'];if(k==='energy_kj'&&(b===undefined||b==='')&&N['energy-kcal_100g']!=null)b=N['energy-kcal_100g']*4.184;if(b===undefined||b===''||b==null)continue;b=+b*f;b=NUT[k].unit==='g'?Math.round(b*10)/10:Math.round(b);
+  nut[k]={unit:NUT[k].unit,per100:b,perServing:ss?Math.round(b*ss/100*10)/10:null,flag:null,q:{}};}
+ return {id:'cmp_'+o.code,code:o.code,name:o.product_name||'Unnamed product',brand:o.brands||'',img:o.image_front_small_url||'',physical:'solid',markets:[],evidenceChecks:{},evidence:[],extracted:{servingSize:{value:ss,unit:'g'},nutrients:nut,ingredientsText:''}};}
+function claimsFor(q,code){try{return evalMarket(q,code).results.filter(r=>isNutritionRule(r.rule)&&(r.status==='meets'||r.status==='panel')).map(r=>r.wording);}catch(e){return [];}}
+async function cmpSearch(){const C=S.cmp;C.loading=true;C.err='';C.items=null;render();
+ const fields='code,product_name,brands,nutriments,serving_quantity,image_front_small_url';
+ const words=C.terms||String(C.tag).replace(/^[a-z]{2}:/,'').replace(/-/g,' ');
+ const textUrl=`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(words)}&search_simple=1&action=process&json=1&page_size=40&fields=${fields}&tagtype_0=countries&tag_contains_0=contains&tag_0=australia`;
+ const urls=C.terms?[textUrl]:[`https://world.openfoodfacts.org/api/v2/search?categories_tags=${encodeURIComponent(C.tag)}&countries_tags=en:australia&fields=${fields}&page_size=40&sort_by=unique_scans_n`,textUrl];
+ // The public search can be slow or briefly busy: try once more, then the other search method.
+ const get=async u=>{for(let i=0;i<2;i++){try{const r=await fetch(u);if(r.ok)return await r.json();}catch(e){}await new Promise(z=>setTimeout(z,1200));}return null;};
+ try{let j=null;for(const u of urls){j=await get(u);if(j&&(j.products||[]).length)break;}if(!j)throw new Error('offline');const mine=cleanCode(P()?.barcode);
+  C.items=(j.products||[]).filter(o=>o.code&&o.code!==mine&&o.nutriments&&['sugars_100g','fat_100g','sodium_100g'].some(k=>o.nutriments[k]!=null)).map(offToLite).slice(0,25);}
+ catch(e){C.err='Couldn\'t reach Open Food Facts. It needs an internet connection.';}
+ C.loading=false;render();}
+function vCompare(){const p=P();if(!p?.extracted)return vQuick();const C=S.cmp||(S.cmp={tag:'',terms:'',market:(p.markets||[])[0]||'AU'});
+ const me={...p,name:p.name||'Your product',brand:p.brand||'',img:thumbOf(p),code:'mine'};const items=C.items||[];const all=[me,...items];
+ const val=(q,k)=>q.extracted?.nutrients?.[k]?.per100??null;
+ const rank=(k,dir)=>{const v=val(me,k);if(v==null||dir===0)return null;const vs=all.map(q=>val(q,k)).filter(x=>x!=null);if(vs.length<3)return null;const better=vs.filter(x=>dir<0?x<v-1e-9:x>v+1e-9).length;return {pos:better+1,of:vs.length};};
+ const ord=n=>n+(['th','st','nd','rd'][(n%100>10&&n%100<14)?0:Math.min(n%10,4)%4]||'th');
+ const ranks=CMP_COLS.filter(c=>c[3]!==0).map(([k,l,u,d])=>({l,r:rank(k,d),d})).filter(x=>x.r);
+ return `<div class="stack" style="max-width:1000px;margin:0 auto">
+ <div><button class="ghost" data-act="nav" data-v="result">← Results</button></div>
+ <h1 style="margin:0">Compare with the market</h1>
+ <p class="small muted" style="margin:0">Similar products sold in Australia, from Open Food Facts (public, crowd-sourced). Their numbers aren't checked, so treat this as a guide.</p>
+ <div class="mchips">${CMP_CATS.map(([l,t])=>`<button class="mchip" data-act="cmpCat" data-v="${t}" aria-pressed="${!C.terms&&C.tag===t}">${l}</button>`).join('')}${(p.offCategories||[]).length?`<button class="mchip" data-act="cmpCat" data-v="${esc(p.offCategories.slice(-1)[0])}" aria-pressed="${!C.terms&&C.tag===p.offCategories.slice(-1)[0]}">Same category as this product</button>`:''}</div>
+ <div class="row"><input id="cmp-terms" placeholder="Or search, e.g. rice crispbread" value="${esc(C.terms||'')}" style="flex:1"><button data-act="cmpGo">Search</button></div>
+ <label class="fld" style="max-width:260px">Claims checked for<select data-cmp="market">${(S.markets?.list||[]).map(x=>`<option value="${x.code}" ${x.code===C.market?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
+ ${C.loading?'<div class="panel small">Searching…</div>':C.err?`<div class="banner warn small">${esc(C.err)}</div>`:''}
+ ${C.items&&!C.items.length?'<div class="panel small muted">No similar products with nutrition data found. Try another category or search.</div>':''}
+ ${items.length?`${ranks.length?`<div class="panel stack" style="gap:6px"><b>Where your product ranks (per 100 g)</b><span class="small muted">1st = lowest fat, saturated fat, sugars and sodium; highest fibre and protein.</span><div class="row small">${ranks.map(x=>`<span class="chip ${x.r.pos===1?'st-meets':x.r.pos<=Math.ceil(x.r.of/3)?'st-pending':'st-draft'}">${x.l}: ${x.r.pos===1?'best':ord(x.r.pos)} of ${x.r.of}</span>`).join('')}</div></div>`:''}
+ <div class="panel" style="overflow-x:auto;padding:0"><table class="cmptab"><thead><tr><th>Product</th>${CMP_COLS.map(([k,l,u])=>`<th class="n">${l}<br><span class="muted">${u}/100 g</span></th>`).join('')}<th>Claims (${esc(marketInfo(C.market).name)}, draft rules)</th></tr></thead><tbody>
+ ${all.map(q=>`<tr class="${q===me?'cmpme':''}"><td><div class="row" style="gap:8px;flex-wrap:nowrap">${q.img?`<img src="${esc(q.img)}" alt="" class="cmpimg">`:''}<div><b>${esc(q.name)}</b>${q===me?' <span class="chip st-approved">Yours</span>':''}<div class="small muted">${esc(q.brand)}</div></div></div></td>${CMP_COLS.map(([k])=>`<td class="n mono">${val(q,k)==null?'—':esc(fmt(val(q,k)))}</td>`).join('')}<td class="small">${esc(claimsFor(q,C.market).join(', ')||'—')}</td></tr>`).join('')}
+ </tbody></table></div>`:''}
+ <p class="small muted disclaim" style="margin:0">${DISCLAIMER}</p></div>`;}
+document.addEventListener('change',e=>{const s=e.target.closest&&e.target.closest('[data-cmp]');if(!s||!S.cmp)return;S.cmp.market=s.value;render();});
+
+/* ---------- packaging jobs: check → QA review → released copy sheet ---------- */
+// A job ties one check to a SKU, formula revision, artwork revision and destination market. QA approves the
+// exact copy (fingerprinted); any later change to that copy or its inputs needs another review.
+const JOB_ST={draft:['Draft','draft'],evidence:['Evidence needed','needs'],ready:['Ready for QA','pending'],changes:['Changes requested','fails'],rereview:['Re-review needed','needs'],approved:['QA approved','meets'],released:['Released','approved']};
+const JOB_NEXT={draft:'NPD: complete the job and send it to QA.',evidence:'NPD: add the evidence the claim needs, then send to QA.',ready:'QA: review, then approve or request changes.',changes:'Fix each change request and mark it done, then send to QA again.',rereview:'QA: something changed since approval. Review it again.',approved:'QA: release the copy sheet to Packaging Design.',released:'Design: use the released copy sheet for artwork.'};
+const CR_FIELDS=['Serving size','Nutrition panel numbers','Ingredients','Allergen statements','Claim wording','Evidence','Market','Formula revision','Artwork revision','Other'];
+function jobClaim(p){const j=p.job;if(!j||!j.claimId||j.claimId==='none')return null;const m=evalMarket(p,j.market);const r=m.results.find(x=>x.rule.id===j.claimId);return r?{m,r}:null;}
+function copySnap(p){const j=p.job||{},x=p.extracted||{nutrients:{}},jc=jobClaim(p);const o={};
+ o['Product name']=p.name||'';o['Brand']=p.brand||'';o['SKU']=p.sku||'';o['Formula revision']=j.formulaRev||'';o['Artwork revision']=p.packVersion||'';o['Market']=marketInfo(j.market||'').name||'';
+ o['Front: claim']=jc?jc.r.wording:'No claim';if(jc&&jc.r.required.length)o['Front: must appear with']=jc.r.required.join(' ');
+ o['Panel: serving size']=x.servingSize?.value!=null?`${x.servingSize.value} ${x.servingSize.unit||'g'}`:'';o['Panel: servings per pack']=x.servingsPerPack||'';
+ const cell=(n,c)=>n[c]==null?'—':(n.q?.[c]==='<'?'<':'')+fmt(n[c]);
+ for(const {k,label} of NUTS){const n=x.nutrients[k];if(n&&(n.perServing!=null||n.per100!=null))o['Panel: '+label.replace('– ','')]=`${cell(n,'perServing')} | ${cell(n,'per100')} ${n.unit}`;}
+ if(x.glutenNotDetected)o['Panel: gluten']='Not detected';
+ o['Ingredients']=x.ingredientsText||'';o['Contains statement']=x.containsText||'';o['May contain statement']=x.mayContainText||'';
+ if(jc&&jc.r.panelChanges?.length)o['Panel changes required']=jc.r.panelChanges.join(' ');return o;}
+const copyHash=p=>hash({c:copySnap(p),d:dataHash(p)});
+function snapDiff(a,b){const keys=[...new Set([...Object.keys(a||{}),...Object.keys(b||{})])];return keys.filter(k=>(a?.[k]??'')!==(b?.[k]??'')).map(k=>({k,before:a?.[k]??'',after:b?.[k]??''}));}
+function jobBlockers(p,forApproval){const j=p.job,out=[];if(!j)return out;
+ if(p.sample)out.push('SAMPLE data can\'t be approved or released.');
+ if(!p.confirmed)out.push('Values haven\'t been confirmed against the pack.');
+ if(openFlags(p).length)out.push(`${openFlags(p).length} number(s) on the panel still need fixing.`);
+ if(!(p.sku||'').trim())out.push('SKU is missing.');if(!(j.formulaRev||'').trim())out.push('Formula revision is missing.');if(!(p.packVersion||'').trim())out.push('Artwork revision is missing.');
+ if(!j.claimId)out.push('Choose the claim for the front of pack (or "No claim").');
+ const jc=jobClaim(p);if(jc){if(jc.r.status==='needs')out.push('Claim needs evidence: '+(jc.r.reasons[0]||'see the breakdown')+'.');else if(jc.r.status==='fails')out.push('The claim doesn\'t qualify in '+jc.m.name+'.');else if(jc.r.status==='panel')out.push('The nutrition panel needs updating before this claim: '+jc.r.panelChanges.join(' '));
+  if(forApproval&&!jc.m.verified)out.push(`${jc.m.name} rules aren't verified by QA yet (Rules tab), so the claim can't be approved.`);}
+ if((j.crs||[]).some(c=>c.status==='open'))out.push('There are open change requests.');return out;}
+function jobStatus(p){const j=p.job;if(!j)return null;const h=copyHash(p);const rel=(j.releases||[]).slice(-1)[0];const jc=jobClaim(p);
+ const apOk=!jc||(()=>{const s=approvalState(p,j.market,jc.r);return s&&s.current;})();const qaOk=j.qa&&j.qa.hash===h&&apOk;
+ if(rel&&rel.hash===h&&qaOk)return 'released';if((j.crs||[]).some(c=>c.status==='open'))return 'changes';
+ if(j.qa)return qaOk?'approved':'rereview';if(j.sent&&j.sent.hash===h)return 'ready';if(jc&&jc.r.status==='needs')return 'evidence';return 'draft';}
+function jobChip(p){const s=jobStatus(p);return s?chip(JOB_ST[s][1],JOB_ST[s][0]):'';}
+function jobLog(p,action,detail){p.job.log=[...(p.job.log||[]),{at:now(),by:S.me?.id||null,role:S.role,action,detail:detail||''}].slice(-200);}
+function vJob(){const p=P();if(!p?.job)return vResult();const j=p.job,st=jobStatus(p),jc=jobClaim(p),bl=jobBlockers(p,true),isQA=S.role==='qa';
+ const m=evalMarket(p,j.market);const claimOpts=m.results.filter(r=>isNutritionRule(r.rule)||OTHER_KINDS.includes(r.rule.kind)||r.rule.kind==='glutenFree').filter(r=>r.status!=='fails');
+ const rel=(j.releases||[]).slice(-1)[0];const diff=rel?snapDiff(rel.snap,copySnap(p)):[];
+ const f=(k,l,v,t='text',src='job')=>`<label class="fld">${l}<input data-f="${src==='job'?'job':'det'}" data-k="${k}" id="j-${k}" type="${t}" value="${esc(v??'')}"></label>`;
+ return `<div class="stack" style="max-width:860px;margin:0 auto">
+ <div class="spread"><button class="ghost" data-act="nav" data-v="result">← Results</button><button class="ghost" data-act="nav" data-v="products">All jobs</button></div>
+ <div><span class="label">${esc(p.brand||'')}</span><h1 style="margin:0">${esc(p.name||'Packaging job')}</h1><div class="row small" style="margin-top:6px">${jobChip(p)}<span class="muted">${esc(marketInfo(j.market).name)} · SKU ${esc(p.sku||'—')} · Formula ${esc(j.formulaRev||'—')} · Artwork ${esc(p.packVersion||'—')}</span></div></div>
+ <div class="banner small"><b>Next:</b> ${esc(JOB_NEXT[st])}${j.owner?` · Owner: <b>${esc(j.owner)}</b>`:''}${j.due?` · Due ${esc(j.due)}`:''}</div>
+ <details class="panel" ${st==='draft'?'open':''}><summary><b>Job details</b></summary><div class="grid2" style="margin-top:8px">${f('brand','Brand',p.brand,'text','det')}${f('name','Product name',p.name,'text','det')}${f('sku','SKU',p.sku,'text','det')}${f('formulaRev','Formula revision',j.formulaRev)}${f('packVersion','Artwork revision',p.packVersion,'text','det')}
+  <label class="fld">Destination market<select data-f="job" data-k="market">${(S.markets?.list||[]).map(x=>`<option value="${x.code}" ${x.code===j.market?'selected':''}>${esc(x.name)}${S.rulesets[x.code]?.status==='verified'?'':' (rules pending)'}</option>`).join('')}</select></label>
+  ${f('owner','Owner',j.owner)}${f('due','Due date',j.due,'date')}</div></details>
+ <div class="panel stack"><h2 style="margin:0">Front-of-pack claim</h2>
+  <label class="fld">Claim for ${esc(m.name)}<select data-f="job" data-k="claimId"><option value="">Choose…</option><option value="none" ${j.claimId==='none'?'selected':''}>No claim</option>${claimOpts.map(r=>`<option value="${r.rule.id}" ${r.rule.id===j.claimId?'selected':''}>${esc(r.wording)} · ${esc(STLABEL[statusFor(m,r)])}</option>`).join('')}</select></label>
+  ${jc?`<div><b style="font-size:1.2rem">${esc(jc.r.wording)}</b> ${chip(statusFor(m,jc.r))}</div>${jc.r.required.length?`<div class="small"><b>Must appear with:</b> ${esc(jc.r.required.join(' '))}</div>`:''}<div class="small muted">${esc(jc.r.rule.source||'')} ${esc(jc.r.rule.clause||'')} · ${esc(m.rs?.code||'')} rules v${esc(m.rs?.version??'?')} (${m.verified?'verified':'pending'})</div>`:''}</div>
+ ${bl.length?`<div class="banner err small"><b>Blocking release:</b><ul style="margin:4px 0 0 18px;padding:0">${bl.map(b=>`<li>${esc(b)}</li>`).join('')}</ul></div>`:`<div class="banner small">${chip('meets','No blockers')} Ready for QA approval.</div>`}
+ <div class="panel stack"><div class="spread"><h2 style="margin:0">Change requests</h2>${isQA?`<button class="small" data-act="crNew">Request a change</button>`:''}</div>
+  ${S.crNew?`<div class="grid2"><label class="fld">Field<select id="cr-field">${CR_FIELDS.map(x=>`<option>${x}</option>`).join('')}</select></label><label class="fld">Assign to<input id="cr-owner" value="${esc(j.owner||'')}"></label></div><label class="fld">What needs to change<textarea id="cr-note" style="min-height:70px"></textarea></label><div class="row"><button class="primary small" data-act="crAdd">Send request</button><button class="ghost small" data-act="crCancel">Cancel</button></div>`:''}
+  ${(j.crs||[]).length?(j.crs||[]).slice().reverse().map(c=>`<div class="ocrow"><div class="spread"><b>${esc(c.field)}</b>${c.status==='open'?chip('fails','Open'):chip('meets','Done')}</div><div class="small">${esc(c.note)}</div><div class="small muted">${esc(nameOf(c.by))} → ${esc(c.owner||'unassigned')} · ${day(c.at)}${c.doneAt?` · done by ${esc(nameOf(c.doneBy))} ${day(c.doneAt)}`:''}</div>${c.status==='open'?`<div><button class="mini" data-act="crDone" data-id="${c.id}">Mark done</button></div>`:''}</div>`).join(''):`<span class="small muted">None.</span>`}</div>
+ <div class="panel stack"><h2 style="margin:0">Review and release</h2>
+  <div class="row">
+   ${!isQA?`<button class="primary" data-act="jobSend" ${jobBlockers(p,false).length?'disabled':''}>${j.sent?'Send to QA again':'Send to QA'}</button>`:''}
+   ${isQA?`<button class="primary" data-act="jobApprove" ${bl.length?'disabled':''}>Approve this version</button><button data-act="jobRelease" ${st==='approved'?'':'disabled'}>Release copy sheet</button>`:''}
+   <button data-act="jobSheet">${st==='released'?'Download released copy sheet':'Copy sheet (draft)'}</button></div>
+  <span class="small muted">${isQA?'You\'re in the QA role.':'Approve and release are done in the QA role (You, top right).'} Roles are labels on this shared device, not logins.</span>
+  ${rel?`<div class="small"><b>Changes since released revision ${rel.n}</b> (${day(rel.at)}): ${diff.length?`<ul style="margin:4px 0 0 18px;padding:0">${diff.map(d=>`<li>${esc(d.k)}: <s>${esc(d.before||'—')}</s> → <b>${esc(d.after||'—')}</b></li>`).join('')}</ul>`:'none.'}</div>`:''}</div>
+ <details class="panel"><summary><b>History</b> (${(j.log||[]).length})</summary><div class="stack small" style="gap:4px;margin-top:8px">${(j.log||[]).slice().reverse().map(l=>`<div>${day(l.at)} · <b>${esc(nameOf(l.by))}</b> (${esc(l.role||'')}) · ${esc(l.action)}${l.detail?': '+esc(l.detail):''}</div>`).join('')||'Nothing yet.'}
+  ${(j.releases||[]).length?`<div style="margin-top:6px"><b>Released revisions</b></div>${(j.releases||[]).slice().reverse().map(r=>`<div>Rev ${r.n} · ${day(r.at)} · ${esc(nameOf(r.by))} · artwork ${esc(r.snap['Artwork revision']||'—')} · formula ${esc(r.snap['Formula revision']||'—')} ${r.hash===copyHash(p)&&st==='released'?chip('approved','Current'):chip('draft','Superseded')} <button class="mini" data-act="jobSheetRel" data-n="${r.n}">Download</button></div>`).join('')}`:''}</div></details>
+ <p class="small muted disclaim" style="margin:0">${DISCLAIMER}</p></div>`;}
+function copySheetHtml(p,rel){const e=esc,j=p.job||{};const snap=rel?rel.snap:copySnap(p);const current=rel&&rel.hash===copyHash(p)&&jobStatus(p)==='released';const released=!!rel;
+ const prev=rel?(j.releases||[]).find(r=>r.n===rel.n-1):(j.releases||[]).slice(-1)[0];const diff=prev?snapDiff(prev.snap,snap):[];
+ const panel=Object.entries(snap).filter(([k])=>k.startsWith('Panel: ')&&k!=='Panel: serving size'&&k!=='Panel: servings per pack'&&k!=='Panel: gluten');
+ const status=released?(current?`RELEASED · revision ${rel.n}`:`SUPERSEDED · revision ${rel.n} is no longer current`):'DRAFT · INTERNAL ONLY · NOT FOR ARTWORK';
+ return `<!doctype html><html><head><meta charset="utf-8"><title>Copy sheet ${e(snap['SKU'])} ${e(snap['Market'])} ${released?'rev '+rel.n:'DRAFT'}</title><style>@page{size:A4;margin:12mm}body{font:11px/1.4 Arial,Helvetica,sans-serif;color:#111;margin:0}h1{font-size:18px;margin:0}h2{font-size:12px;margin:12px 0 4px;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #111}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 6px;text-align:left;vertical-align:top}th{background:#eee}.st{border:3px solid ${released&&current?'#16703a':'#a8261c'};color:${released&&current?'#16703a':'#a8261c'};font-weight:bold;text-align:center;padding:6px;letter-spacing:.08em;font-size:13px}.claim{font-size:20px;font-weight:bold}.v td{font-size:10px}.wm{position:fixed;top:40%;left:0;right:0;text-align:center;font-size:80px;color:rgba(168,38,28,.08);transform:rotate(-25deg);pointer-events:none}</style></head><body>
+ ${released&&current?'':'<div class=wm>DRAFT</div>'}<div class=st>${e(status)}</div>
+ <h1>Copy sheet: ${e(snap['Brand'])} ${e(snap['Product name'])}</h1>
+ <table class=v style="margin-top:6px"><tr><th>SKU</th><td>${e(snap['SKU'])}</td><th>Market</th><td>${e(snap['Market'])}</td></tr><tr><th>Formula revision</th><td>${e(snap['Formula revision'])}</td><th>Artwork revision</th><td>${e(snap['Artwork revision'])}</td></tr>
+ <tr><th>Release</th><td>${released?`Revision ${rel.n}, ${e(new Date(rel.at).toLocaleString())}, released by ${e(nameOf(rel.by))}`:'Not released'}</td><th>Fingerprint</th><td>${e(released?rel.hash:copyHash(p))}</td></tr>
+ <tr><th>QA approval</th><td colspan=3>${released?`${e(nameOf(rel.qaBy))}, ${e(new Date(rel.qaAt).toLocaleString())}`:j.qa?`${e(nameOf(j.qa.by))}, ${e(new Date(j.qa.at).toLocaleString())}${j.qa.hash===copyHash(p)?'':' (out of date: something changed since)'}`:'Not approved'}</td></tr></table>
+ <h2>Front of pack</h2><div class=claim>${e(snap['Front: claim'])}</div>${snap['Front: must appear with']?`<div><b>Must appear with:</b> ${e(snap['Front: must appear with'])}</div>`:''}
+ <h2>Back of pack: nutrition information</h2><div>Servings per package: ${e(snap['Panel: servings per pack']||'—')} · Serving size: ${e(snap['Panel: serving size']||'—')}</div>
+ <table style="margin-top:4px"><tr><th></th><th>Per serving | Per 100 g, unit</th></tr>${panel.map(([k,v])=>`<tr><td>${e(k.replace('Panel: ',''))}</td><td>${e(v)}</td></tr>`).join('')}${snap['Panel: gluten']?`<tr><td>Gluten</td><td>${e(snap['Panel: gluten'])}</td></tr>`:''}</table>
+ ${snap['Panel changes required']?`<div><b>Panel changes required:</b> ${e(snap['Panel changes required'])}</div>`:''}
+ <h2>Back or side of pack: ingredients and allergens</h2><div><b>Ingredients:</b> ${e(snap['Ingredients']||'—')}</div><div><b>Contains:</b> ${e(snap['Contains statement']||'—')}</div><div><b>May contain:</b> ${e(snap['May contain statement']||'—')}</div>
+ <h2>Changes since ${prev?'revision '+prev.n:'previous revision'}</h2>${prev?(diff.length?`<table><tr><th>Field</th><th>Before</th><th>Now</th></tr>${diff.map(d=>`<tr><td>${e(d.k)}</td><td>${e(d.before||'—')}</td><td><b>${e(d.after||'—')}</b></td></tr>`).join('')}</table>`:'No changes.'):'First revision.'}
+ <p style="margin-top:12px;font-size:9.5px;border-top:1px solid #999;padding-top:6px">${e(DISCLAIMER)} Generated ${e(new Date().toLocaleString())} by PackPick.</p></body></html>`;}
+
 /* ---------- barcode: open a saved check, or look the product up in Open Food Facts ---------- */
 var scanCtl=null;
 function vScan(){const link=S.scanLink&&S.products[S.scanLink];
@@ -1004,25 +1150,32 @@ async function handleBarcode(raw){const code=cleanCode(raw);if(code.length<6){sc
  const mine=Object.values(S.products).filter(p=>cleanCode(p.barcode)===code).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''))[0];
  if(mine){S.pid=mine.id;S.view=mine.extracted?'result':'product';toast('Opened your saved check.');render();return;}
  S.view='scan';S.busy='';render();scanMsg('Looking up '+code+' in Open Food Facts…');
- try{const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_en,brands,ingredients_text_en,ingredients_text,nutriments,serving_quantity,serving_size,image_front_url,image_nutrition_url,allergens_tags,traces_tags,countries_tags`);
+ try{const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_en,brands,ingredients_text_en,ingredients_text,nutriments,serving_quantity,serving_size,image_front_url,image_nutrition_url,image_ingredients_url,allergens_tags,traces_tags,countries_tags,categories_tags,lang,ingredients_text_fr,ingredients_text_es,ingredients_text_de`);
   const j=await r.json();if(j.status!==1||!j.product){scanMsg(`Barcode ${code} isn't in Open Food Facts. Take a photo of the panel instead.`);S.offMiss=code;render();return;}
   await productFromOff(code,j.product);}
  catch(e){scanMsg('Couldn\'t reach Open Food Facts (it needs internet). Take a photo of the panel instead.');}}
 async function productFromOff(code,o){const p=await newQuickProduct(false);const N=o.nutriments||{};const ss=num(o.serving_quantity);
- p.name=o.product_name_en||o.product_name||('Product '+code);p.brand=o.brands||'';p.barcode=code;p.offLookup=true;
+ p.name=o.product_name_en||o.product_name||('Product '+code);p.brand=o.brands||'';p.barcode=code;p.offLookup=true;p.offChecked=false;p.offCategories=(o.categories_tags||[]).slice(-6);
+ // Round to how a panel prints: energy and mg to whole numbers, grams to one decimal.
+ const rnd=(k,v)=>v==null?null:(NUT[k].unit==='g'?Math.round(v*10)/10:Math.round(v));
  const g=(key,col)=>{const v=N[`${key}_${col}`];return v===undefined||v===''?null:+v;};
  const map=[['energy_kj','energy-kj',1],['protein_g','proteins',1],['fat_total_g','fat',1],['fat_saturated_g','saturated-fat',1],['fat_trans_g','trans-fat',1],['carbohydrate_g','carbohydrates',1],['sugars_g','sugars',1],['dietary_fibre_g','fiber',1],['sodium_mg','sodium',1000],['salt_g','salt',1],['potassium_mg','potassium',1000]];
  const x={source:`Open Food Facts (barcode ${code}), ${day(now())}. Crowd-sourced: check every value against the pack.`,servingSize:{value:ss,unit:'g'},servingsPerPack:'',nutrients:{},
-  ingredientsText:o.ingredients_text_en||o.ingredients_text||'',warnings:['These values come from Open Food Facts, a public database anyone can edit. They may be out of date or wrong. Check every value against the pack.'],transcript:''};
+  ingredientsText:o.ingredients_text_en||o.ingredients_text||o.ingredients_text_fr||o.ingredients_text_es||o.ingredients_text_de||'',warnings:['These values come from Open Food Facts, a public database anyone can edit. They may be out of date or wrong. Check every value against the pack.'],transcript:''};
  for(const [k,key,f] of map){let a=g(key,'serving'),b=g(key,'100g');if(k==='energy_kj'&&b==null){const kc=g('energy-kcal','100g');if(kc!=null)b=Math.round(kc*4.184);const kcs=g('energy-kcal','serving');if(a==null&&kcs!=null)a=Math.round(kcs*4.184);}
-  if(a!=null)a=+fmt(a*f,2);if(b!=null)b=+fmt(b*f,2);if(a==null&&b!=null&&ss)a=+fmt(b*ss/100,2);
-  if(a==null&&b==null)continue;x.nutrients[k]={unit:NUTS.find(n=>n.k===k).unit,perServing:a,per100:b,flag:null,labelSeen:true,q:{perServing:null,per100:null}};}
+  if(a!=null)a=a*f;if(b!=null)b=b*f;if(a==null&&b!=null&&ss)a=b*ss/100;a=rnd(k,a);b=rnd(k,b);
+  if(a==null&&b==null)continue;x.nutrients[k]={unit:NUTS.find(n=>n.k===k).unit,perServing:a,per100:b,flag:null,labelSeen:true,db:true,q:{perServing:null,per100:null}};}
  for(const {k,unit} of NUTS)if(!x.nutrients[k])x.nutrients[k]={unit,perServing:null,per100:null,flag:{type:'missing',note:'Not in Open Food Facts.',status:'open'}};
  const tags=t=>(t||[]).map(s=>String(s).replace(/^[a-z]{2}:/,'').replace(/-/g,' ')).join(', ');
  if(o.allergens_tags?.length)x.containsText='Contains: '+tags(o.allergens_tags);if(o.traces_tags?.length)x.mayContainText='May contain: '+tags(o.traces_tags);
  x.mayContainGluten=MAY_CONTAIN_GLUTEN.test(x.mayContainText||'');
  x.transcript=[`Open Food Facts · barcode ${code}`,`${p.brand} ${p.name}`,ss?`Serving: ${o.serving_size||ss+' g'}`:'Serving size: not listed',...Object.entries(x.nutrients).filter(([k,n])=>n.per100!=null).map(([k,n])=>`${NUT[k].label.replace('– ','')}: ${n.perServing??'—'} / ${n.per100} ${n.unit}`),x.ingredientsText?'Ingredients: '+x.ingredientsText:''].filter(Boolean).join('\n');
- p.captures.push({id:uid(),kind:'any',method:'text',text:x.transcript,at:now(),by:S.me?.id||null});
+ p.captures.push({id:uid(),kind:'any',method:'text',db:true,text:x.transcript,at:now(),by:S.me?.id||null});
+ // No ingredient text in the database: read its ingredients photo, if it has one.
+ if(!x.ingredientsText&&o.image_ingredients_url&&/^https:\/\/images\.openfoodfacts\.org\//.test(o.image_ingredients_url)){scanMsg('Reading the ingredients photo…');
+  try{const b=await (await fetch(o.image_ingredients_url)).blob();if(/^image\//.test(b.type)){const r=await ocr(b,()=>{});const src=/ingredient/i.test(r.text)?r.text:(/ingredient/i.test(r.tableText)?r.tableText:r.text);const t=parseIngredients(src);
+   if(t){x.ingredientsText=t;x.warnings.push('Ingredients were read from the database\'s photo. Check the spelling against the pack.');}}}catch(e){}}
+ if(!x.ingredientsText)x.warnings.push('Open Food Facts has no ingredients for this product. Add them with a photo or by typing.');
  // Pack photos from the database, for the card and for comparing.
  if(!ss){x.noServing=true;x.warnings.unshift('Open Food Facts has no serving size for this product. Enter it from the pack to see per-serving values.');}
  for(const [u,kind] of [[o.image_nutrition_url,'nip'],[o.image_front_url,'front']]){if(!u||!/^https:\/\/images\.openfoodfacts\.org\//.test(u))continue;try{const b=await (await fetch(u)).blob();if(!/^image\//.test(b.type))continue;const c={id:uid(),kind,method:'off',at:now(),by:S.me?.id||null};S.mem[c.id]={blob:b,url:URL.createObjectURL(b)};try{c.assetId=await storeBlob(b);}catch(e){}p.captures.unshift(c);}catch(e){}}
@@ -1282,8 +1435,8 @@ const NUT_MATCH=[['fat_saturated_g',/s[a@]tur[a@]t/i],['fat_trans_g',/\btr[a@]ns
 // Alternative readings of one number: the trailing "g" misread as 9 or 4, or a lost decimal point.
 function numCands(t){const s=/^0\d+$/.test(t.s)?'0.'+t.s.slice(1):t.s,out=[{v:t.v,c:0}];const dot=s.indexOf('.');
  if(dot>=0&&s.length-dot-1>=2&&/[94]$/.test(s))out.push({v:+s.slice(0,-1),c:1,strong:true});
- if(!t.u&&dot<0&&s.length>=2&&/[94]$/.test(s))out.push({v:+s.slice(0,-1),c:1});
- if(!t.u&&dot<0&&s.length>=3&&/[94]$/.test(s))out.push({v:+s.slice(0,-1)/10,c:2});
+ if(dot<0&&s.length>=2&&/[94]$/.test(s))out.push({v:+s.slice(0,-1),c:t.u?2:1});
+ if(dot<0&&s.length>=3&&/[94]$/.test(s))out.push({v:+s.slice(0,-1)/10,c:t.u?3:2});
  if(dot<0&&s.length>=2)out.push({v:t.v/10,c:1});
  // A leading "1" is thin and sometimes vanishes ("11.7" read as "1.7").
  for(const b of [s,...(dot>=0&&s.length-dot-1>=2&&/[94]$/.test(s)?[s.slice(0,-1)]:[])])if(/^\d\.\d$/.test(b))out.push({v:+('1'+b),c:2});
@@ -1379,7 +1532,7 @@ function parseIngredients(text){const t=String(text).replace(/\r/g,'');const m=t
 async function extract(){const p=P();S.err='';const caps=p.captures||[];
  if(caps.length&&caps.every(c=>c.method==='sample')){applyExtraction(p,clone(SAMPLE_EXTRACTION));return;}
  S.busy='extract';S.ocrStep='Starting the photo reader…';render();
- try{const imgs=await imageBlobs(p);const texts=caps.filter(c=>c.method==='text');
+ try{const imgs=await imageBlobs(p);const texts=caps.filter(c=>c.method==='text'&&!c.db);
   const nipLines=[],tableLines=[],colLines=[],altLines=[],ingTexts=[],transcript=[],warnings=[];let i=0;
   for(const {c,b} of imgs){S.ocrStep=`Reading photo ${++i} of ${imgs.length}…`;render();
    const r=await ocr(b,pr=>{const bar=document.querySelector('.progress>i');if(bar)bar.style.width=Math.round(pr*100)+'%';});
@@ -1444,6 +1597,27 @@ document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-ac
  case 'qPaste':{S.qText=false;try{if(navigator.clipboard?.read){const items=await navigator.clipboard.read();for(const it of items){const t=it.types.find(x=>x.startsWith('image/'));if(t){const b=await it.getType(t);S.pickMode='quick';return handlePicked([new File([b],'pasted.'+t.split('/')[1],{type:t})],'paste-image');}}}}catch(e){}
   S.qPaste=true;render();setTimeout(()=>$('#q-paste')?.focus(),50);return;}
  case 'qPasteClose':S.qPaste=false;break;
+ case 'cmpOpen':{const tag=(p.offCategories||[]).slice(-1)[0]||'';if(!S.cmp||S.cmp.pid!==p.id)S.cmp={pid:p.id,tag,terms:'',market:(p.markets||[])[0]||'AU',items:null};S.view='compare';window.scrollTo(0,0);render();if(S.cmp.tag&&!S.cmp.items)cmpSearch();return;}
+ case 'cmpCat':S.cmp.tag=b.dataset.v;S.cmp.terms='';return cmpSearch();
+ case 'cmpGo':{const t=($('#cmp-terms')?.value||'').trim();if(!t){toast('Type what to search for.');return;}S.cmp.terms=t;return cmpSearch();}
+ case 'offCheck':S.pickMode='offCheck';$('#fileCam').click();return;
+ case 'offCheckUp':S.pickMode='offCheck';$('#fileUp').click();return;
+ case 'openJob':S.pid=b.dataset.id;S.view='job';window.scrollTo(0,0);break;
+ case 'jobOpen':{if(!p)return;if(!p.job){p.job={market:(p.markets||[])[0]||'AU',formulaRev:'',owner:S.me?.id||'',due:'',claimId:'',crs:[],releases:[],log:[],createdAt:now()};jobLog(p,'Created job');await saveProduct(p);}S.view='job';window.scrollTo(0,0);break;}
+ case 'jobSend':{const bl=jobBlockers(p,false);if(bl.length){toast(bl[0]);return;}p.job.sent={at:now(),by:S.me?.id||null,hash:copyHash(p)};jobLog(p,'Sent to QA');await saveProduct(p);toast('Sent to QA.');break;}
+ case 'crNew':S.crNew=true;break;case 'crCancel':S.crNew=false;break;
+ case 'crAdd':{const note=$('#cr-note').value.trim();if(!note){toast('Say what needs to change.');return;}const c={id:uid(),field:$('#cr-field').value,owner:$('#cr-owner').value.trim(),note,status:'open',at:now(),by:S.me?.id||null};
+  p.job.crs=[...(p.job.crs||[]),c];p.job.sent=null;jobLog(p,'Requested a change',`${c.field}: ${note} (→ ${c.owner||'unassigned'})`);S.crNew=false;await saveProduct(p);break;}
+ case 'crDone':{const c=(p.job.crs||[]).find(x=>x.id===b.dataset.id);if(!c)return;c.status='done';c.doneAt=now();c.doneBy=S.me?.id||null;jobLog(p,'Change request done',c.field);await saveProduct(p);break;}
+ case 'jobApprove':{if(S.role!=='qa'){toast('Switch to the QA role first (You, top right).');return;}if(!S.me.id){toast('Add your name under You first.');S.view='settings';break;}
+  const bl=jobBlockers(p,true);if(bl.length){toast(bl[0]);return;}const jc=jobClaim(p);
+  if(jc){const res=jc.r,code=p.job.market;const doc={productId:p.id,sku:p.sku,packVersion:p.packVersion,productName:p.name,market:code,claimId:res.rule.id,wording:res.wording,reviewerId:S.me.id,at:now(),dataHash:dataHash(p),rulesetVersion:S.rulesets[code].version,evidenceIds:(p.evidence||[]).map(e=>e.id),note:'Approved in packaging job',status:'approved',checks:res.checks.map(c=>({label:c.label,result:c.result,value:c.value??null,thr:c.thr??null,unit:c.unit||null}))};
+   try{await S.db.doc('approvals/'+apKey(p,code,res.rule)).set(doc);}catch(e){toast('Couldn\'t save the approval.');return;}}
+  p.job.qa={at:now(),by:S.me.id,hash:copyHash(p)};jobLog(p,'QA approved this version',`fingerprint ${p.job.qa.hash}`);await saveProduct(p);toast('Approved.');break;}
+ case 'jobRelease':{if(S.role!=='qa'){toast('Switch to the QA role first.');return;}if(jobStatus(p)!=='approved'){toast('Approve the current version first.');return;}
+  const n=(p.job.releases||[]).length+1;const r={n,at:now(),by:S.me.id,qaBy:p.job.qa.by,qaAt:p.job.qa.at,hash:copyHash(p),snap:copySnap(p)};p.job.releases=[...(p.job.releases||[]),r];jobLog(p,'Released copy sheet',`revision ${n}`);await saveProduct(p);toast(`Released revision ${n}.`);break;}
+ case 'jobSheet':{const st=jobStatus(p);const rel=st==='released'?(p.job.releases||[]).slice(-1)[0]:null;saveFile(`Copy sheet - ${(p.sku||'SKU').replace(/[^\w.-]+/g,'_')} - ${p.job.market} - ${rel?'rev'+rel.n:'DRAFT'}.html`,copySheetHtml(p,rel),'text/html');return;}
+ case 'jobSheetRel':{const rel=(p.job.releases||[]).find(r=>r.n===+b.dataset.n);if(!rel)return;saveFile(`Copy sheet - ${(p.sku||'SKU').replace(/[^\w.-]+/g,'_')} - ${p.job.market} - rev${rel.n}.html`,copySheetHtml(p,rel),'text/html');return;}
  case 'scanOpen':case 'scanLink':S.scanLink=a==='scanLink'?p?.id:null;S.scanMsg='';S.offMiss=null;S.view='scan';window.scrollTo(0,0);render();setTimeout(scanStart,60);return;
  case 'scanClose':scanStop();{const l=S.scanLink;S.scanLink=null;S.view=l?'result':'quick';}break;
  case 'scanGo':{const v=$('#scanCode')?.value;scanStop();return handleBarcode(v);}
@@ -1549,6 +1723,10 @@ document.addEventListener('change',ev=>{const t=ev.target;const f=t.dataset.f;if
  if(f==='chk'){S.chk=t.checked;render();return;}
  if(!p)return;
  if(f==='det'){let v=t.value;if(t.dataset.k==='usRaccG')v=num(v);p[t.dataset.k]=v;const data=['physical','usRaccG','categoryKind'].includes(t.dataset.k);touch(p,data);return;}
+ if(f==='job'&&p.job){const k=t.dataset.k,v=t.value;const old=p.job[k];p.job[k]=v;
+  if(k==='market'){if(!(p.markets||[]).includes(v))p.markets=[...(p.markets||[]),v];p.job.claimId='';}
+  if(['market','claimId','formulaRev'].includes(k)&&old!==v)jobLog(p,'Changed '+({market:'market',claimId:'claim',formulaRev:'formula revision'}[k]),`${old||'—'} → ${k==='market'?marketInfo(v).name:v||'—'}`);
+  saveProduct(p);return;}
  const x=p.extracted;
  if(f==='nut'){const n=x.nutrients[t.dataset.k]=x.nutrients[t.dataset.k]||{unit:NUT[t.dataset.k].unit};
   if(t.dataset.c==='unit')n.unit=t.value;
@@ -1604,11 +1782,11 @@ function saveFile(name,data,type){const b=data instanceof Blob?data:new Blob([da
 const blobToDataUrl=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(b);});
 
 /* ---------- you (no logins in this version) ---------- */
-function loadMe(){try{const m=JSON.parse(localStorage.getItem('packpick.me')||'{}');S.me={id:m.name||null};S.role=m.role==='qa'?'qa':'packaging';}catch(e){S.me={id:null};}S.canEdit=S.role==='qa';}
+function loadMe(){try{const m=JSON.parse(localStorage.getItem('packpick.me')||'{}');S.me={id:m.name||null};S.role=['qa','npd'].includes(m.role)?m.role:'packaging';}catch(e){S.me={id:null};}S.canEdit=S.role==='qa';}
 function saveMe(name,role){S.me={id:name||null};S.role=role;S.canEdit=role==='qa';try{localStorage.setItem('packpick.me',JSON.stringify({name,role}));}catch(e){toast('This browser won\'t save settings (private mode?).');}}
 function vSettings(){return `<div class="stack"><h1>You</h1><div class="panel stack"><p class="small muted" style="margin:0">Your name is recorded on values you confirm, evidence you add and any QA approvals. It's saved on this device only.</p>
  <label class="fld" style="max-width:360px">Your name<input id="me-name" value="${esc(S.me.id||'')}" autocomplete="name"></label>
- <label class="fld" style="max-width:360px">Role<select id="me-role"><option value="packaging" ${S.role!=='qa'?'selected':''}>Packaging team</option><option value="qa" ${S.role==='qa'?'selected':''}>QA reviewer (verifies rules and approves claims)</option></select></label>
+ <label class="fld" style="max-width:360px">Role<select id="me-role"><option value="packaging" ${S.role==='packaging'?'selected':''}>Packaging Design</option><option value="npd" ${S.role==='npd'?'selected':''}>NPD</option><option value="qa" ${S.role==='qa'?'selected':''}>QA reviewer (verifies rules and approves claims)</option></select></label>
  <div><button class="primary" data-act="saveMe">Save</button></div>
  <p class="small muted" style="margin:0">This version has no logins, so roles work on trust. Only people your QA lead authorises should choose QA reviewer. Enforced logins need company hosting.</p></div></div>`;}
 
