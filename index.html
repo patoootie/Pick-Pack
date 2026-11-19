@@ -199,6 +199,8 @@ button.qopt:hover{border-color:var(--ink)}
 .dbtag{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--needs,#c98a1b);border:1px solid currentColor;border-radius:4px;padding:0 4px;margin-left:6px;vertical-align:middle}
 .cmptab{border-collapse:collapse;width:100%;font-size:.85rem;min-width:760px}.cmptab th,.cmptab td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}.cmptab .n{text-align:right;white-space:nowrap}
 .cmpme td{background:color-mix(in srgb,var(--hl) 14%,transparent)}.cmpimg{width:36px;height:36px;object-fit:cover;border-radius:6px;flex:none}
+.sniprow img{display:block;max-width:100%;height:auto;max-height:64px;border-radius:4px;border:1px solid var(--line);background:#fff}
+tr.sniprow td{padding:0 0 8px;border-top:0}
 .qtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;max-width:560px;width:100%;margin:8px auto 4px}
 .qtile{display:flex;flex-direction:column;align-items:center;gap:8px;background:none;border:0;padding:6px 0;font-weight:600;font-size:.9rem;color:var(--ink);min-height:auto}
 .qcirc{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;transition:transform .15s}.qtile:active .qcirc{transform:scale(.94)}
@@ -353,7 +355,7 @@ function issuesFor(p){
   if(a===null||b===null){out[k]={type:'missing',note:(a===null?'Per serving':'Per 100')+' value is missing.'};continue;}
   // "Less than" and rounded-zero values are ranges, so they can't be cross-checked exactly.
   const ranged=['<','~0'].includes(n.q?.perServing)||['<','~0'].includes(n.q?.per100);
-  if(ss&&!ranged){const exp=b*ss/100,tol=Math.max(exp*.2,NUT[k].unit==='g'?0.15:NUT[k].unit==='mg'?5:10);if(Math.abs(exp-a)>tol)out[k]={type:'conflict',note:`Per serving (${a}) doesn't match per 100 × serving size (expected ≈ ${fmt(exp,1)}).`};
+  if(ss&&!ranged&&!n.derived){const exp=b*ss/100,tol=NUT[k].unit==='kJ'?Math.max(exp*.04,3):Math.max(consTol(a,b,ss),NUT[k].unit==='g'?0.06:1);if(Math.abs(exp-a)>tol)out[k]={type:'conflict',note:`Per serving (${a}) doesn't match per 100 × serving size (expected ≈ ${fmt(exp,1)}).`};
    // A printed 0 next to an amount that would show as at least 0.1 is a misread (e.g. "0.1 g" read as "0 g").
    else if(NUT[k].unit==='g'&&((a===0&&exp>=0.06)||(b===0&&a>=0.06)))out[k]={type:'conflict',note:`Per serving reads as ${a} but per 100 g is ${b}, so the serving should show about ${fmt(exp,1)}. A decimal was probably missed.`};}}
  for(const {k} of NUTS){const n=ns[k];if(!n||NUT[k].unit==='kJ'||out[k])continue;const b=num(n.per100);if(b!==null&&toCanon(k,b,n.unit)>(NUT[k].unit==='mg'?100000:100))out[k]={type:'conflict',note:'More than 100 g per 100 g isn\'t possible. A decimal point was probably missed.'};}
@@ -607,7 +609,7 @@ function nipRows(p){const x=p.extracted||{nutrients:{}},lab=per100Label(p);retur
   const shown=c=>n[c]==null?'':(n.q?.[c]==='<'?'<':'')+n[c];const tip=c=>n.q?.[c]==='~0'?` title="Printed as 0 on a US panel, which means less than ${US_ZERO_BOUND[k]} ${NUT[k].unit}"`:n.q?.[c]==='<'?' title="Printed as less than this value"':'';
   return `<tr class="${open?'flag-open':''}"><td>${label}${mark}</td><td class="n"><input id="n-${k}-ps" class="num" inputmode="decimal" data-f="nut" data-k="${k}" data-c="perServing" value="${esc(shown('perServing'))}"${tip('perServing')} placeholder="—" aria-label="${label} per serving"></td>
   <td class="n"><input id="n-${k}-p100" class="num${n.derived?' derived':''}" inputmode="decimal" data-f="nut" data-k="${k}" data-c="per100" value="${esc(shown('per100'))}"${tip('per100')} placeholder="—" aria-label="${label} ${lab}"></td>
-  <td><select id="n-${k}-u" data-f="nut" data-k="${k}" data-c="unit" aria-label="${label} unit">${UNIT_OPTS[unit].map(u=>`<option ${n.unit===u?'selected':''}>${u}</option>`).join('')}</select></td></tr>${sub}`;}).join('');}
+  <td><select id="n-${k}-u" data-f="nut" data-k="${k}" data-c="unit" aria-label="${label} unit">${UNIT_OPTS[unit].map(u=>`<option ${n.unit===u?'selected':''}>${u}</option>`).join('')}</select></td></tr>${(()=>{const sn=x.snips?.[k];return sn&&(S.showSnips||open)?`<tr class="sniprow"><td colspan="4"><img src="${esc(sn)}" alt="The ${esc(label.replace('– ',''))} row in your photo"></td></tr>`:'';})()}${sub}`;}).join('');}
 function sReview(p){
  if(!p.extracted)p.extracted={servingSize:{value:null,unit:'g'},servingsPerPack:'',nutrients:{},ingredientsText:'',warnings:[],source:'Entered by hand'};
  const x=p.extracted,lab=per100Label(p),open=openFlags(p);
@@ -788,7 +790,9 @@ function vGuide(){return `<div class="stack"><h1>Demo guide</h1>
 function qMarkets(){try{const m=JSON.parse(localStorage.getItem('packpick.markets')||'null');if(Array.isArray(m)&&m.length)return m;}catch(e){}return ['AU'];}
 function setQMarkets(m){try{localStorage.setItem('packpick.markets',JSON.stringify(m));}catch(e){}}
 const isFlagged=(p,k)=>p.extracted?.nutrients?.[k]?.flag?.status==='open';
-function nipPanel(p){const x=p.extracted;return `<div class="nipcard"><div class="niphead">NUTRITION INFORMATION</div>
+function nipPanel(p){const x=p.extracted;const hasSn=x.snips&&Object.keys(x.snips).length;return `<div class="nipcard"><div class="niphead">NUTRITION INFORMATION</div>
+ ${hasSn?`<label class="chk small" style="margin:6px 0"><input type="checkbox" data-f="snips" ${S.showSnips?'checked':''}><span>Show the photo under each row (rows in red always show it)</span></label>`:''}
+ ${hasSn&&x.snips.ss&&(S.showSnips||x.servingSize?.value==null)?`<div class="sniprow"><img src="${esc(x.snips.ss)}" alt="The serving size line in your photo"></div>`:''}
  <div class="grid2"><label class="fld">Serving size (${esc(x.servingSize?.unit||'g')})<input id="x-ss" class="num" inputmode="decimal" data-f="ss" value="${esc(x.servingSize?.value??'')}" placeholder="missing"></label><label class="fld">Servings per pack<input id="x-spp" data-f="spp" value="${esc(x.servingsPerPack??'')}"></label></div>
  <div class="tablewrap"><table class="nip"><thead><tr><th></th><th class="n">Per serving</th><th class="n">${per100Label(p)}</th><th></th></tr></thead><tbody>${nipRows(p)}</tbody></table></div></div>`;}
 // Up to five distinct nutrition claims (one per nutrient). Only verified markets count as passing;
@@ -838,7 +842,7 @@ function vAllergens(p){const x=p.extracted||{};
  <div class="algkey small"><span class="chip al-chip-free">Not listed</span><span class="chip al-chip-may">May contain</span><span class="chip al-chip-contains">Contains</span></div>
  <div class="algchips">${rows.map(r=>`<span class="chip al-chip-${r.st}" title="${esc(r.note)}">${r.gfMeets?'Gluten free ✓':esc(r.label.replace(/\s*\(.*$/,''))}</span>`).join('')}</div>
  <p class="small muted" style="margin:0">“Not listed” isn't proof it's absent. “Free from” claims need supplier evidence.</p></div>`;}
-function marketPicker(p){const sel=new Set(p.markets||[]);return `<div class="mchips">${(S.markets?.list||[]).map(m=>`<button class="mchip" data-act="qmtog" data-code="${m.code}" aria-pressed="${sel.has(m.code)}" title="${esc(rsStatusText(m.code))}"><span class="dot ${rsDot(m.code)}"></span>${esc(m.name)}</button>`).join('')}</div>`;}
+function marketPicker(p){const sel=new Set(p.markets||[]);return `<div class="row small"><button class="small" data-act="qmAll">Select all</button><button class="small ghost" data-act="qmNone">Clear all</button></div><div class="mchips">${(S.markets?.list||[]).map(m=>`<button class="mchip" data-act="qmtog" data-code="${m.code}" aria-pressed="${sel.has(m.code)}" title="${esc(rsStatusText(m.code))}"><span class="dot ${rsDot(m.code)}"></span>${esc(m.name)}</button>`).join('')}</div>`;}
 function vQuick(){
  if(S.busy==='extract')return `<div class="panel stack" style="max-width:620px;margin:32px auto"><h1>Reading the pack…</h1><p class="muted" style="margin:0">${esc(S.ocrStep||'Starting…')}</p><div class="progress" style="height:10px;flex:none"><i style="width:0%"></i></div><p class="small muted" style="margin:0">Photos are read on this device. The first time takes a little longer.</p></div>`;
  const ico={cam:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',up:'<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 16l5-5 4 4 2-2 5 5"/><circle cx="15.5" cy="9.5" r="1.5"/>',paste:'<rect x="6" y="5" width="12" height="15" rx="2"/><path d="M9 5V3.5h6V5"/><path d="M9 11h6M9 15h4"/>',type:'<path d="M5 6h14M12 6v13M9 19h6"/>',scan:'<path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3"/><path d="M8 9v6M11 9v6M14 9v6M16.5 9v6"/>'};
@@ -855,7 +859,7 @@ function vQuick(){
    const th=thumbOf(p);return `<button class="panel rcard" data-act="open" data-id="${p.id}">${th?`<img class="rthumb" src="${esc(th)}" alt="">`:`<span class="rthumb rthumb-none" aria-hidden="true">≡</span>`}<b>${esc(p.name||'Pack check')}</b><span class="small muted">${esc(p.job?(jobClaim(p)?.r.wording||'No claim chosen'):(top||'No claim yet'))}</span><span>${p.job?jobChip(p):top?chip('draft','Proposed · not approved'):''}</span>${o?`<span class="small" style="color:var(--fails)">${o} to fix</span>`:''}</button>`;}).join('')}</div></div>`:''}
  </div>`;}
 function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
- if(!(p.markets||[]).length)p.markets=['AU'];const codes=p.markets;const t=quickTop(p,codes);const open=openFlags(p);
+ const noMk=!(p.markets||[]).length;const codes=noMk?['AU']:p.markets;const t=quickTop(p,codes);const open=openFlags(p);
  const unver=t.ms.filter(m=>!m.verified).map(m=>m.name);
  return `<div class="stack">
  <div class="spread"><button class="ghost" data-act="qNew">← Check another pack</button>${p.sample?'<span class="chip sample">SAMPLE DATA</span>':''}${p.barcode?'':`<button class="ghost small" data-act="scanLink">Link barcode</button>`}</div>
@@ -889,12 +893,13 @@ function vResult(){const p=P();if(!p||!p.extracted)return vQuick();
    <button class="primary big" data-act="qConfirm" ${open.length||num(p.extracted.servingSize?.value)==null?'disabled':''}>Confirm values against pack</button>`}</div>
  </div>
  <div class="stack">
-  <div class="spread"><h2>Best claims</h2><button class="small" data-act="qMk" aria-expanded="${!!S.qMk}">${esc(codes.map(c=>marketInfo(c).name).join(', '))} ▾</button></div>
-  ${S.qMk?`<div class="panel stack"><span class="small muted">Check for these markets:</span>${marketPicker(p)}</div>`:''}
+  <div class="spread"><h2>Best claims</h2><button class="small" data-act="qMk" aria-expanded="${!!S.qMk}">${noMk?'Choose markets':esc(codes.map(c=>marketInfo(c).name).join(', '))} ▾</button></div>
+  ${S.qMk||noMk?`<div class="panel stack"><span class="small muted">Check for these markets:</span>${marketPicker(p)}</div>`:''}
+  ${noMk?`<div class="panel small muted">Choose at least one market to see claims.</div>`:`
   ${t.preview?`<div class="banner small"><b>Preview only.</b> Rules not yet verified by QA.</div>`:unver.length?`<div class="banner small">Rules pending for ${esc(unver.join(', '))}.</div>`:''}
   ${t.list.length?`<div class="panel qlist">${t.list.map((g,i)=>claimRow(p,t,g,i)).join('')}</div>`
    :`<div class="panel"><b>${t.preview?'No claim would pass the draft rules.':'No nutrition claim qualifies.'}</b><p class="small muted" style="margin:4px 0 0">${open.length?'Fix the numbers marked in red first.':t.preview?'Rules for the selected markets are still pending.':'With these numbers, none of the checked nutrition claims qualify in the selected markets with verified rules.'}</p></div>`}
-  ${otherCalloutsHtml(p,codes)}
+  ${otherCalloutsHtml(p,codes)}`}
   ${vAllergens(p)}
   <button class="big" data-act="cmpOpen">Compare with similar products</button>
   <div class="row"><button class="primary big" data-act="qBreakdown" style="flex:1">See breakdown</button><button class="big" data-act="jobOpen" style="flex:1">${p.job?'Open job ':'Make packaging job'}${p.job?jobChip(p):''}</button></div>
@@ -1354,17 +1359,21 @@ function qualityText(q){if(!q)return [];const t=[];if(q.blurry)t.push('It looks 
 async function shrinkImage(file,max=3000){try{const bmp=await createImageBitmap(file);const sc=Math.min(1,max/Math.max(bmp.width,bmp.height));const c=document.createElement('canvas');c.width=Math.round(bmp.width*sc);c.height=Math.round(bmp.height*sc);c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);return await new Promise(r=>c.toBlob(b=>r(b||file),'image/jpeg',.9));}catch(e){return file;}}
 // Image prep: scale up small text, optionally straighten, then a local (adaptive) threshold so
 // uneven lighting and faint print don't wash out digits and decimal points.
-async function prepCanvas(blob,angleDeg=0){const bmp=await createImageBitmap(blob);const sc=Math.min(3,Math.max(1,2400/bmp.width));
+// mode: 'adaptive' (default, black and white), 'gray' (contrast-stretched greyscale, keeps thin strokes and decimal
+// points that thresholding can erase), 'bold' (adaptive with a wider window, thickens faint condensed digits).
+async function prepCanvas(blob,angleDeg=0,mode='adaptive'){const bmp=await createImageBitmap(blob);const sc=Math.min(3,Math.max(1,2400/bmp.width));
  const W=Math.round(bmp.width*sc),H=Math.round(bmp.height*sc);const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d',{willReadFrequently:true});
  x.fillStyle='#fff';x.fillRect(0,0,W,H);x.imageSmoothingQuality='high';
  if(angleDeg){x.translate(W/2,H/2);x.rotate(angleDeg*Math.PI/180);x.drawImage(bmp,-W/2,-H/2,W,H);x.setTransform(1,0,0,1,0,0);}else x.drawImage(bmp,0,0,W,H);
  const im=x.getImageData(0,0,W,H),d=im.data;const g=new Float32Array(W*H);for(let i=0,j=0;i<d.length;i+=4,j++)g[j]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+ if(mode==='gray'){const sorted=Float32Array.from(g).sort();const lo=sorted[Math.floor(g.length*.02)],hi=sorted[Math.floor(g.length*.98)],span=Math.max(1,hi-lo);
+  for(let j=0,k=0;j<g.length;j++,k+=4){const v=Math.max(0,Math.min(255,(g[j]-lo)*255/span));d[k]=d[k+1]=d[k+2]=v;}x.putImageData(im,0,0);return {canvas:c,W,H};}
  // Bradley adaptive threshold using an integral image.
  const I=new Float64Array((W+1)*(H+1));for(let yy=1;yy<=H;yy++){let row=0;for(let xx=1;xx<=W;xx++){row+=g[(yy-1)*W+xx-1];I[yy*(W+1)+xx]=I[(yy-1)*(W+1)+xx]+row;}}
- const s=Math.max(16,Math.round(W/24)),h=s>>1,t=0.12;
+ const s=Math.max(16,Math.round(W/(mode==='bold'?14:24))),h=s>>1,t=mode==='bold'?0.06:0.12;
  for(let yy=0;yy<H;yy++){const y0=Math.max(0,yy-h),y1=Math.min(H,yy+h+1);for(let xx=0;xx<W;xx++){const x0=Math.max(0,xx-h),x1=Math.min(W,xx+h+1);
   const sum=I[y1*(W+1)+x1]-I[y0*(W+1)+x1]-I[y1*(W+1)+x0]+I[y0*(W+1)+x0];const cnt=(x1-x0)*(y1-y0);const v=g[yy*W+xx]*cnt<sum*(1-t)?0:255;const k=(yy*W+xx)*4;d[k]=d[k+1]=d[k+2]=v;}}
- removeRules(d,W,H);x.putImageData(im,0,0);return {canvas:c,W,H};}
+ removeRules(d,W,H);x.putImageData(im,0,0);return {canvas:c,W,H,sc};}
 // Panel ruling lines touch the numbers and confuse the reader (a number's box stretches to the end of the line,
 // or a whole row is skipped). Long straight runs of ink are lines, not letters, so turn them white.
 function removeRules(d,W,H){const hMin=Math.round(W*0.08),vMin=Math.round(H*0.08);const kill=[];
@@ -1393,9 +1402,40 @@ async function ocr(blob,onProg){
   stage=2;const region=numberRegion(tl,prep.W,prep.H);let numLines=null;
   if(region){const d=await pass({tessedit_pageseg_mode:'6',tessedit_char_whitelist:'0123456789.,<gmkJcalCK%()/ '},region);numLines=toLines(d);}
   onProg(1);
-  return {text:auto.text||'',lines:toLines(auto),tableText:table.text||'',tableLines:tl,numLines,imgW:prep.W,straightened};}
+  return {text:auto.text||'',lines:toLines(auto),tableText:table.text||'',tableLines:tl,numLines,imgW:prep.W,imgH:prep.H,scale:prep.sc,straightened};}
  finally{await w.terminate();}}
 
+// Cut the strip of the original (colour) photo for each nutrient row and the serving size, so a person can compare
+// the numbers PackPick read with the pack itself, row by row.
+async function rowSnips(blob,r){const out={};try{const bmp=await createImageBitmap(blob);const sc=r.scale||1,W=r.imgW,H=r.imgH||Math.round(bmp.height*sc),ang=r.straightened?-r.straightened:0;
+ const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,H);
+ if(ang){x.translate(W/2,H/2);x.rotate(ang*Math.PI/180);x.drawImage(bmp,-W/2,-H/2,W,H);x.setTransform(1,0,0,1,0,0);}else x.drawImage(bmp,0,0,W,H);
+ const keys=[...NUT_MATCH.map(([k,re])=>[k,re]),['ss',/serv(?:ing|e)\s*size/i]];
+ for(const l of [...(r.tableLines||[]),...(r.lines||[])]){if(!l.bbox)continue;const hit=keys.find(([k,re])=>re.test(l.text));if(!hit||out[hit[0]])continue;
+  const b=l.bbox,h=b.y1-b.y0,pad=Math.round(h*.35);const x0=Math.max(0,b.x0-pad),y0=Math.max(0,b.y0-pad),w=Math.min(W,b.x1+pad)-x0,hh=Math.min(H,b.y1+pad)-y0;if(w<20||hh<8)continue;
+  const s=Math.min(1,700/w);const o=document.createElement('canvas');o.width=Math.round(w*s);o.height=Math.round(hh*s);o.getContext('2d').drawImage(c,x0,y0,w,hh,0,0,o.width,o.height);
+  out[hit[0]]=o.toDataURL('image/jpeg',.72);}}catch(e){}return out;}
+// Extra readings of the same photo with different image prep, for photos the first pass didn't read cleanly.
+async function ocrVariants(blob,ang,onProg){const w=await Tesseract.createWorker('eng',1);const out=[];let st=0;
+ try{for(const mode of ['gray','bold']){const prep=await prepCanvas(blob,ang?-ang:0,mode);
+   const pass=async(params,rect)=>{await w.setParameters({preserve_interword_spaces:'1',tessedit_char_whitelist:'',...params});const {data}=await w.recognize(prep.canvas,rect?{rectangle:rect}:{});onProg&&onProg(Math.min(1,++st/4));return data;};
+   const tl=toLines(await pass({tessedit_pageseg_mode:'6'}));const region=numberRegion(tl,prep.W,prep.H);let nl=null;
+   if(region)nl=toLines(await pass({tessedit_pageseg_mode:'6',tessedit_char_whitelist:'0123456789.,<gmkJcalCK%()/ '},region));else st++;
+   out.push({tableLines:tl,cols:columnLines(tl,nl,prep.W)});}}
+ finally{await w.terminate();}return out;}
+// Is a combined reading good enough to skip the extra readings?
+function readingClean(nip){if(!nip||nip.servingSize?.value==null)return false;return MANDATORY_NIP.every(k=>{const n=nip.nutrients[k];return n&&n.perServing!=null&&n.per100!=null&&rowScore(n,nip.servingSize.value)===0;});}
+// Many readings → one panel. Serving size by majority; then per row, the reading that adds up best, with a bonus when
+// several readings agree. A repair that two readings agree on is no longer treated as a guess.
+function combineReadings(texts,cols){const ssList=[];for(const t of texts){const q=parseNip(t);if(q.servingSize?.value!=null&&!q.servingSize.inferred)ssList.push(q.servingSize);}
+ let ssF=null;if(ssList.length){const cnt={};for(const s of ssList)cnt[s.value]=(cnt[s.value]||0)+(s.g6?0.6:1);const best=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0];ssF={...ssList.find(s=>String(s.value)===best),value:+best};}
+ const tn=texts.map(t=>parseNip(t,ssF||undefined));if(!ssF){const inf=tn.map(q=>q.servingSize).find(s=>s?.value!=null);if(inf){ssF=inf;for(let i=0;i<texts.length;i++)tn[i]=parseNip(texts[i],{...inf});}}
+ const pso=tn.some(q=>q.perServeOnly);const cn=pso?[]:cols.map(c=>parseNip(c,ssF?{...ssF}:undefined));const all=[...cn,...tn];if(!all.length)return parseNip([]);
+ const base=all.reduce((a,b)=>mergeNip(a,b));const ss=base.servingSize.value;
+ for(const {k} of NUTS){const groups=new Map();for(const q of all){const n=q.nutrients[k];if(!n||(n.perServing==null&&n.per100==null))continue;const key=`${n.perServing}|${n.per100}`;const g=groups.get(key)||{n,count:0,score:9};g.count++;const sc=rowScore(n,ss);if(sc<g.score){g.score=sc;g.n=n;}groups.set(key,g);}
+  if(!groups.size)continue;const pick=[...groups.values()].sort((a,b)=>(a.score-0.8*(a.count-1))-(b.score-0.8*(b.count-1)))[0];const n=clone(pick.n);
+  if(pick.count>=2&&n.flag?.risky&&pick.score<=3)n.flag.risky=false;base.nutrients[k]=n;}
+ return base;}
 // Read the panel by column position: find where the number columns sit across the nutrient rows,
 // then give each number to its column. Returns lines for parseNip with explicit cells, or null.
 function numTokens(words,minX){const out=[];for(let i=0;i<words.length;i++){const w=words[i];if(w.bbox.x0<minX)continue;const t=cleanNums(w.text).replace(/¢/g,'g');
@@ -1429,14 +1469,18 @@ function columnLines(tableLines,numLines,imgW){
    r.alt=useful.map(c=>cellFor(alt,c));}
   return {text:r.l.text,conf:r.l.conf,cols:useful.map(c=>cellFor(nums,c)),altCols:r.alt||null};});
  return out;}
-function cleanNums(s){return String(s).replace(/(\d)\s*¢/g,'$1g').replace(/(\d)\s*k[)\]}|lI1J]/g,'$1kJ').replace(/(\d)\s*[,·]\s*(\d)/g,'$1.$2').replace(/(\d)[oO]/g,(m,a)=>a+'0').replace(/[oO](\d)/g,(m,a)=>'0'+a).replace(/(\d)[lI|]/g,(m,a)=>a+'1').replace(/[lI|](\d)/g,(m,a)=>'1'+a);}
+function cleanNums(s){return String(s).replace(/(\d)\s*¢/g,'$1g').replace(/(\d)i(\d)/g,'$11$2').replace(/(\d)\s*k[)\]}|lI1Jd]/g,'$1kJ').replace(/(\d)\s*k(?=\s|$)/g,'$1kJ')
+ // Condensed fonts: a 7 at the start of a number often reads as "T".
+ .replace(/(^|[\s(|])T(\d)/g,'$17$2').replace(/(\d)\s*[,·]\s*(\d)/g,'$1.$2').replace(/(\d)[oO]/g,(m,a)=>a+'0').replace(/[oO](\d)/g,(m,a)=>'0'+a).replace(/(\d)[lI|]/g,(m,a)=>a+'1').replace(/[lI|](\d)/g,(m,a)=>'1'+a);}
 // Row names, tolerant of the reader mixing up O/0 and I/l/1.
 const NUT_MATCH=[['fat_saturated_g',/s[a@]tur[a@]t/i],['fat_trans_g',/\btr[a@]ns(?![a-eg-z])/i],['sugars_g',/sug[a@]r/i],['dietary_fibre_g',/f[i1l|]b(re|er)/i],['energy_kj',/en[e3]rgy|kilojoule|calories(?!\s*a\s*day)/i],['protein_g',/pr[o0]te[i1l|]n|\bp[r]?[o0]te?[i1l|]?n\b/i],['carbohydrate_g',/c[a@]rb[o0]/i],['sodium_mg',/s[o0][d0ob](?:[i1l|]u|[i1l|]|u)m(?!\s*bicarb)/i],['potassium_mg',/p[o0]t[a@]ss[i1l]um/i],['salt_g',/^\W{0,3}s[a@][l1i]t\b(?!\s*,)/i],['fat_total_g',/\bf[a@]t(?:t[o0]t[a@]l)?(?![a-z])/i]];
 // Alternative readings of one number: the trailing "g" misread as 9 or 4, or a lost decimal point.
 function numCands(t){const s=/^0\d+$/.test(t.s)?'0.'+t.s.slice(1):t.s,out=[{v:t.v,c:0}];const dot=s.indexOf('.');
- if(dot>=0&&s.length-dot-1>=2&&/[94]$/.test(s))out.push({v:+s.slice(0,-1),c:1,strong:true});
- if(dot<0&&s.length>=2&&/[94]$/.test(s))out.push({v:+s.slice(0,-1),c:t.u?2:1});
- if(dot<0&&s.length>=3&&/[94]$/.test(s))out.push({v:+s.slice(0,-1)/10,c:t.u?3:2});
+ // The letter "g" can read as 9 or 4, and in condensed fonts as 5 or 3.
+ const gx=/[94]$/.test(s)?0:/[53]$/.test(s)?1:-1;
+ if(dot>=0&&s.length-dot-1>=2&&gx>=0)out.push({v:+s.slice(0,-1),c:1+gx,strong:gx===0});
+ if(dot<0&&s.length>=2&&gx>=0)out.push({v:+s.slice(0,-1),c:(t.u?2:1)+gx});
+ if(dot<0&&s.length>=3&&gx>=0)out.push({v:+s.slice(0,-1)/10,c:(t.u?3:2)+gx});
  if(dot<0&&s.length>=2)out.push({v:t.v/10,c:1});
  // A leading "1" is thin and sometimes vanishes ("11.7" read as "1.7").
  for(const b of [s,...(dot>=0&&s.length-dot-1>=2&&/[94]$/.test(s)?[s.slice(0,-1)]:[])])if(/^\d\.\d$/.test(b))out.push({v:+('1'+b),c:2});
@@ -1446,24 +1490,44 @@ function numCands(t){const s=/^0\d+$/.test(t.s)?'0.'+t.s.slice(1):t.s,out=[{v:t.
  return out;}
 // Pick the per-serving / per-100 pair that agrees with the serving size, preferring the fewest changes.
 function pickPair(A,B,ss){let best=null;
- for(const a of numCands(A))for(const b of numCands(B)){if(b.v>100||a.v>ss)continue;const e=b.v*ss/100;const tol=Math.max(e*.15,.06,a.v>=10?.5:0);const fit=Math.abs(a.v-e)<=tol;
-  const score=(fit?0:10)+(a.c+b.c)*.3-((a.strong?1:0)+(b.strong?1:0))*.5;
-  if(!best||score<best.score)best={a:a.v,b:b.v,score,fit,changed:(a.c+b.c)>0};}
+ // Panels print grams to one decimal, so a repaired value with more decimals is less likely.
+ const dp=v=>{const m=String(+v.toFixed(6)).split('.')[1];return m?m.length:0;};
+ for(const a of numCands(A))for(const b of numCands(B)){if(b.v>100||a.v>ss)continue;const e=b.v*ss/100;const tol=Math.max(consTol(a.v,b.v,ss),.06);const fit=Math.abs(a.v-e)<=tol;
+  const score=(fit?0:10)+(a.c+b.c)*.3-((a.strong?1:0)+(b.strong?1:0))*.5+(dp(a.v)>1?1.5:0)+(dp(b.v)>1?1.5:0);
+  if(!best||score<best.score)best={a:a.v,b:b.v,score,fit,changed:(a.c+b.c)>0,cost:a.c+b.c};}
  return best;}
+// How far per serving may sit from per 100 × serving size: each printed number can be off by half its last digit
+// (1.3 means 1.25–1.35), plus 3% for how the panel was calculated. Much tighter than a flat percentage.
+const decs=v=>{const m=String(+(+v).toFixed(6)).split('.')[1];return m?m.length:0;};
+function consTol(a,b,ss){const e=b*ss/100;return 0.5*10**-decs(a)+0.5*10**-decs(b)*ss/100+e*0.03;}
 // Two readings of the same photo: keep, row by row, the one that is complete and adds up.
 function rowScore(n,ss){if(!n)return 9;if(n.perServing==null&&n.per100==null)return 8;if(n.perServing==null||n.per100==null)return 6;
- let s=n.flag?(n.flag.type==='blurry'?1:4):0;if(ss&&n.unit!=='kJ'){const e=n.per100*ss/100,tol=Math.max(e*.2,n.unit==='mg'?5:.15);if(Math.abs(n.perServing-e)>tol)s+=5;}return s;}
+ let s=n.flag?(n.flag.type==='blurry'?(n.flag.risky?3:1):4):0;
+ if(ss&&!n.derived){const e=n.per100*ss/100;const tol=n.unit==='kJ'||n.unit==='kcal'?Math.max(e*.04,3):consTol(n.perServing,n.per100,ss);if(Math.abs(n.perServing-e)>tol)s+=5;}return s;}
 function mergeNip(a,b){if(!b)return a;const out={...a,nutrients:{}};
  if((a.servingSize.value==null||a.servingSize.inferred)&&b.servingSize.value!=null&&!(b.servingSize.inferred&&a.servingSize.value!=null))out.servingSize=b.servingSize;if(!a.servingsPerPack&&b.servingsPerPack)out.servingsPerPack=b.servingsPerPack;out.liquid=a.liquid||b.liquid;out.perServeOnly=a.perServeOnly||b.perServeOnly;out.multiCol=a.multiCol||b.multiCol;out.glutenNotDetected=a.glutenNotDetected||b.glutenNotDetected;
  const ss=out.servingSize.value;for(const {k} of NUTS){const x=a.nutrients[k],y=b.nutrients[k];const sx=rowScore(x,ss),sy=rowScore(y,ss);const pick=sy<sx?y:x;if(pick)out.nutrients[k]=pick;}
  return out;}
 // Energy check: protein, fat and carbohydrate can't hold more energy than the whole food. A row that breaks this
 // usually lost a decimal point in both columns; shift it only if that makes the panel add up.
-function energyBalanceFix(nip){const ns=nip.nutrients;const en=ns.energy_kj;if(!en||en.per100==null)return;const E=toCanon('energy_kj',en.per100,en.unit);if(!E)return;
+function energyBalanceFix(nip){const ns=nip.nutrients;const en=ns.energy_kj;if(!en)return;const ssv=nip.servingSize?.value;
+ // Per 100 g energy unreadable or inconsistent? Per serving ÷ serving size gives it for this check (not shown on the panel).
+ let p100=en.per100;if(en.perServing!=null&&ssv&&(p100==null||Math.abs(en.perServing-p100*ssv/100)>Math.max(p100*ssv/100*.04,3)))p100=en.perServing*100/ssv;
+ if(p100==null)return;const E=toCanon('energy_kj',p100,en.unit);if(!E)return;
  const g=k=>{const n=ns[k];return n&&n.per100!=null?toCanon(k,n.per100,n.unit):0;};
  // Only act on gross mismatches (a missed decimal adds hundreds of kJ). Ordinary rounding or extra
  // ingredients like polyols can make the sum run 20–40% over, so leave those alone.
  const calc=()=>17*g('protein_g')+37*g('fat_total_g')+17*g('carbohydrate_g')+8*g('dietary_fibre_g');const ok=()=>calc()<=E*1.5+40;
+ // Finer check: a row that lost its decimal point in both columns still matches the serving size, but makes the
+ // energy wrong. If moving one row's decimal brings the energy from clearly off (>20%) to close (<8%), do that.
+ // Up to three rows can be shifted (one at a time, each a clear improvement); kept only if the energy then adds up.
+ {const err=()=>Math.abs(calc()-E)/E;const e0=err();const calc0=calc();
+  if(e0>0.2){const shifted=[];const sh=(n,d)=>{n.per100=+(n.per100/d).toFixed(2);if(n.perServing!=null)n.perServing=+(n.perServing/d).toFixed(2);};
+   for(let it=0;it<3&&err()>0.08;it++){let best=null;const now=err();
+    for(const k of ['protein_g','fat_total_g','carbohydrate_g','dietary_fibre_g']){const n=ns[k];if(!n||n.per100==null||n.per100<1||shifted.some(s=>s.k===k))continue;const o={ps:n.perServing,p:n.per100};sh(n,10);const e1=err();if(e1<now*0.7&&(!best||e1<best.e))best={k,e:e1};n.perServing=o.ps;n.per100=o.p;}
+    if(!best)break;const n=ns[best.k];shifted.push({k:best.k,o:`${n.perServing??'—'} / ${n.per100}`,ps:n.perServing,p:n.per100});sh(n,10);}
+   if(shifted.length&&err()<0.08){for(const s of shifted){const n=ns[s.k];n.flag={type:'blurry',status:'open',note:`Read as ${s.o}. With that, the food would have about ${fmt(calc0,0)} kJ instead of the ${fmt(E,0)} kJ on the panel, so the decimal points were probably missed. PackPick used ${n.perServing??'—'} / ${n.per100}, which makes the energy add up. Check against the pack.`};}return;}
+   for(const s of shifted){const n=ns[s.k];n.perServing=s.ps;n.per100=s.p;}}}
  if(ok())return;
  for(const k of ['protein_g','carbohydrate_g','fat_total_g','dietary_fibre_g']){const n=ns[k];if(!n||n.per100==null||n.per100<10)continue;const o={ps:n.perServing,p:n.per100};
   n.per100=+fmt(n.per100/10,2);if(n.perServing!=null&&n.perServing>=1)n.perServing=+fmt(n.perServing/10,2);
@@ -1472,7 +1536,12 @@ function energyBalanceFix(nip){const ns=nip.nutrients;const en=ns.energy_kj;if(!
 // A part can't be bigger than its whole: carbohydrate ≥ sugars, total fat ≥ saturated fat. If it is, a row borrowed
 // another row's numbers, so flag the whole for checking rather than trust it.
 function hierarchyCheck(nip){const ns=nip.nutrients;for(const [whole,part,wl,pl] of [['carbohydrate_g','sugars_g','Carbohydrate','sugars'],['fat_total_g','fat_saturated_g','Total fat','saturated fat']]){
- const W=ns[whole],P=ns[part];if(!W||!P)continue;for(const c of ['perServing','per100']){if(W[c]!=null&&P[c]!=null&&W[c]+1e-9<P[c]&&W.q?.[c]!=='<'){W.flag={type:'conflict',status:'open',note:`${wl} (${W[c]}) is less than ${pl} (${P[c]}), which can't be right. Check this row against the pack.`};break;}}}}
+ const W=ns[whole],P=ns[part];if(!W||!P)continue;
+  // The part lost its decimal points (e.g. 12.1 / 8.6 read as 121 / 86)? Shifting both makes it fit inside the whole.
+  if(W.perServing!=null&&W.per100!=null&&P.perServing!=null&&P.per100!=null&&(P.per100>W.per100||P.perServing>W.perServing)&&P.per100/10<=W.per100&&P.perServing/10<=W.perServing){
+   const o=`${P.perServing} / ${P.per100}`;P.perServing=+(P.perServing/10).toFixed(2);P.per100=+(P.per100/10).toFixed(2);
+   P.flag={type:'blurry',status:'open',note:`Read as ${o}, which is more than ${wl.toLowerCase()}. The decimal points were probably missed, so PackPick used ${P.perServing} / ${P.per100}. Check against the pack.`};continue;}
+  for(const c of ['perServing','per100']){if(W[c]!=null&&P[c]!=null&&W[c]+1e-9<P[c]&&W.q?.[c]!=='<'){W.flag={type:'conflict',status:'open',note:`${wl} (${W[c]}) is less than ${pl} (${P[c]}), which can't be right. Check this row against the pack.`};break;}}}}
 // Serving size from the panel itself: per-serving ÷ per-100 g for energy, checked against sodium.
 function inferServing(ns){const r=k=>{const n=ns[k];if(!n||n.perServing==null||!n.per100)return null;return n.perServing/n.per100*100;};
  const e=r('energy_kj'),s=r('sodium_mg');if(e==null)return null;if(e<2||e>500)return null;if(s!=null&&Math.abs(s-e)/e>.06)return null;
@@ -1481,6 +1550,8 @@ function parseNip(lines,forcedSs){
  const out={nutrients:{},servingSize:forcedSs||{value:null,unit:'g'},servingsPerPack:'',liquid:false};
  const all=cleanNums(lines.map(l=>l.text).join('\n')).replace(/\b(\d) (\d)(?=\s*servings?)/gi,'$1$2');
  const ss=forcedSs?null:(all.match(/serving\s*size[^\d\n]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/per\s*serv(?:ing|e)[\s:(]*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/serv(?:ing|e)\s*[:(]?\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i)||all.match(/(\d+(?:\.\d+)?)\s*(g|ml)\s*\/\s*[\d.]+\s*(?:oz|fl)/i));if(ss)out.servingSize={value:+ss[1],unit:/ml/i.test(ss[2])?'mL':'g'};
+ // "140G" in a condensed font reads as "1406": a trailing 6 standing in for the G.
+ else if(!forcedSs){const m6=all.match(/serv(?:ing|e)\s*size[^\d\n]*(\d{2,4})6\b(?!\s*(?:g|ml)\b)/i);if(m6)out.servingSize={value:+m6[1],unit:'g',g6:true};}
  const sp=all.match(/((?:about\s*|approx\.?\s*)?\d+(?:\.\d+)?)\s*servings?\s*per\s*(?:package|pack|container)/i)||all.match(/servings?\s*per\s*(?:package|pack|container)[^\d]{0,60}?((?:approx\.?\s*)?\d+(?:\.\d+)?)/i);if(sp)out.servingsPerPack=sp[1];
  if(/per\s*100\s*ml/i.test(all))out.liquid=true;
  out.glutenNotDetected=/gluten[\s\S]{0,140}?(not\s*detected|nil\s*detected|non\s*rilevato|no\s*detectado|non-?d[ée]tect|not\s*detectable)/i.test(all);
@@ -1513,13 +1584,20 @@ function parseNip(lines,forcedSs){
     if(best){if(best.i===1){n.dry100=toks[0].v;n.q.dry100=toks[0].lt?'<':null;}toks=[toks[best.i],toks[best.j]];out.multiCol=true;}}
    n.perServing=toks[0].v;n.per100=toks[1].v;n.q.perServing=toks[0].lt?'<':null;n.q.per100=toks[1].lt?'<':null;
    const ssz=out.servingSize.value;
+   // Energy: a 7 read as 1 (or 1 as 7) breaks per serving vs per 100. Try swapping one digit; keep it only if it fits.
+   if(ssz&&k==='energy_kj'&&n.perServing&&n.per100){const fitE=(a,b)=>Math.abs(a-b*ssz/100)<=Math.max(b*ssz/100*.03,3);
+    if(!fitE(n.perServing,n.per100)){const vars=s=>{const o=[];for(let i=0;i<s.length;i++){const ch=s[i];if(ch==='1'||ch==='7')o.push(+(s.slice(0,i)+(ch==='1'?'7':'1')+s.slice(i+1)));}return o;};
+     const A=String(toks[0].s),B=String(toks[1].s);let hit=null;for(const a of [+A,...vars(A)])for(const b of [+B,...vars(B)])if(!hit&&(a!==+A||b!==+B)&&fitE(a,b))hit={a,b};
+     if(hit){n.perServing=hit.a;n.per100=hit.b;n.flag={type:'blurry',note:`Read as ${A} / ${B}. In this font a 7 and a 1 look alike, so PackPick suggests ${hit.a} / ${hit.b}, which matches the serving size. Check against the pack.`,status:'open'};}}}
    if(ssz&&unit==='g'&&k!=='energy_kj'){const pk=pickPair(toks[0],toks[1],ssz);
-    if(pk&&pk.changed&&pk.fit){n.perServing=pk.a;n.per100=pk.b;n.flag={type:'blurry',note:`Read as ${toks[0].s} / ${toks[1].s}. On photos the letter "g" often reads as a 9 or 4, and decimal points get lost, so PackPick suggests ${fmt(pk.a)} / ${fmt(pk.b)}, which matches the serving size. Check against the pack.`,status:'open'};}
+    if(pk&&pk.changed&&pk.fit){n.perServing=pk.a;n.per100=pk.b;n.flag={type:'blurry',risky:pk.cost>=3,note:`Read as ${toks[0].s} / ${toks[1].s}. On photos the letter "g" often reads as a 9 or 4, and decimal points get lost, so PackPick suggests ${fmt(pk.a)} / ${fmt(pk.b)}, which matches the serving size. Check against the pack.`,status:'open'};}
     else{const st=t=>numCands(t).find(c=>c.strong);const sa=st(toks[0]),sb=st(toks[1]);if(sa||sb){if(sa)n.perServing=sa.v;if(sb)n.per100=sb.v;n.flag={type:'blurry',note:`Read as ${toks[0].s} / ${toks[1].s}. A trailing "g" was probably read as a digit. Check this row against the pack.`,status:'open'};}}}
    if(toks.length>2&&!n.flag)n.flag={type:'conflict',note:`Found ${toks.length} numbers on this line (${toks.map(x=>x.v).join(', ')}). Used the first two. Check against the pack.`,status:'open'};}
   else if(toks.length===1&&single==='ps'){n.perServing=toks[0].v;n.q.perServing=toks[0].lt?'<':null;n.flag={type:'missing',note:'Only the per-serving number was found in this row.',status:'open'};}
   else if(toks.length===1&&single==='p100'){n.per100=toks[0].v;n.q.per100=toks[0].lt?'<':null;n.flag={type:'missing',note:'Only the per 100 g number was found in this row.',status:'open'};}
   else if(toks.length===1){n.per100=toks[0].v;n.q.per100=toks[0].lt?'<':null;n.flag={type:'missing',note:'Only one number found on this line. It went into the per-100 column. Check which column it belongs to.',status:'open'};}
+  // "5.g" or "1.": a digit after the decimal point is missing, so the number can't be trusted.
+  if(/\d\.(?!\d)\s*(?:g|mg|kj|$|\s)/i.test(t)&&(n.perServing!=null||n.per100!=null))n.flag={type:'blurry',risky:true,status:'open',note:'A digit after a decimal point is missing in the photo. Type this row from the pack.'};
   if(!n.flag&&mn)n.flag={type:'blurry',note:'Part of a number looked like a letter (e.g. "N7" for 11.7). PackPick read it as 11. Check against the pack.',status:'open'};
   if(!n.flag&&lostDot)n.flag={type:'blurry',note:'A decimal point looked missing (e.g. "09" read as 0.9). Check against the pack.',status:'open'};
   if(!n.flag&&l.conf!=null&&l.conf<75)n.flag={type:'blurry',note:`The photo reader was only ${Math.round(l.conf)}% sure about this line.`,status:'open'};
@@ -1533,11 +1611,16 @@ async function extract(){const p=P();S.err='';const caps=p.captures||[];
  if(caps.length&&caps.every(c=>c.method==='sample')){applyExtraction(p,clone(SAMPLE_EXTRACTION));return;}
  S.busy='extract';S.ocrStep='Starting the photo reader…';render();
  try{const imgs=await imageBlobs(p);const texts=caps.filter(c=>c.method==='text'&&!c.db);
-  const nipLines=[],tableLines=[],colLines=[],altLines=[],ingTexts=[],transcript=[],warnings=[];let i=0;
+  const nipLines=[],tableLines=[],colLines=[],altLines=[],extraTables=[],extraCols=[],ingTexts=[],transcript=[],warnings=[],snips={};let i=0;
+  const bar=pr=>{const el=document.querySelector('.progress>i');if(el)el.style.width=Math.round(pr*100)+'%';};
   for(const {c,b} of imgs){S.ocrStep=`Reading photo ${++i} of ${imgs.length}…`;render();
-   const r=await ocr(b,pr=>{const bar=document.querySelector('.progress>i');if(bar)bar.style.width=Math.round(pr*100)+'%';});
+   const r=await ocr(b,bar);
    transcript.push(`[${{nip:'NIP',ingredients:'Ingredients',any:'Pack'}[c.kind]||'Pack'} photo]\n`+r.text.trim());if(c.kind!=='ingredients'){nipLines.push(...r.lines);tableLines.push(...r.tableLines);
-    const cl=columnLines(r.tableLines,r.numLines,r.imgW);if(cl){colLines.push(...cl.map(x=>({text:x.text,conf:x.conf,cols:x.cols})));altLines.push(...cl.filter(x=>x.altCols).map(x=>({text:x.text,conf:x.conf,cols:x.altCols})));}
+    {const sn=await rowSnips(b,r);for(const [k,v] of Object.entries(sn))if(!snips[k])snips[k]=v;}
+    const cl=columnLines(r.tableLines,r.numLines,r.imgW);const cA=cl?cl.map(x=>({text:x.text,conf:x.conf,cols:x.cols})):[],cB=cl?cl.filter(x=>x.altCols).map(x=>({text:x.text,conf:x.conf,cols:x.altCols})):[];colLines.push(...cA);altLines.push(...cB);
+    // Not clean on the first pass (missing serving size, a missing row, or a row that doesn't add up)? Read it two more ways.
+    if(!readingClean(combineReadings([r.lines,r.tableLines],[cA,cB].filter(a=>a.length)))){S.ocrStep=`Photo ${i}: reading it again more carefully…`;render();
+     try{for(const v of await ocrVariants(b,r.straightened,bar)){extraTables.push(v.tableLines);if(v.cols){extraCols.push(v.cols.map(x=>({text:x.text,conf:x.conf,cols:x.cols})));const alt=v.cols.filter(x=>x.altCols).map(x=>({text:x.text,conf:x.conf,cols:x.altCols}));if(alt.length)extraCols.push(alt);}}}catch(e){}}
     {const qt=qualityText(c.quality);if(qt.length)warnings.push('Photo check: '+qt.join(' ')+' Compare every number with the pack.');}
     if(r.straightened)warnings.push(`The photo was tilted about ${Math.abs(r.straightened).toFixed(1)}°, so PackPick straightened it before reading.`);}
    // Use whichever read kept more of the ingredient list together (most commas).
@@ -1545,17 +1628,11 @@ async function extract(){const p=P();S.err='';const caps=p.captures||[];
   for(const c of texts){transcript.push(`[Pasted ${c.kind==='nip'?'NIP':'ingredients'} text]\n`+c.text);if(c.kind!=='ingredients')nipLines.push(...c.text.split(/\n/).map(t=>({text:t,conf:null})));if(c.kind==='ingredients'||(c.kind==='any'&&/ingredient/i.test(c.text)))ingTexts.push(c.text);}
   if(caps.some(c=>c.method!=='text'&&c.method!=='sample'&&!imgs.find(x=>x.c.id===c.id)))warnings.push('Some photos are no longer stored on this device, so they were not read.');
   if(!nipLines.length&&!ingTexts.length)throw {message:'Nothing to read yet. Add a photo or paste the text first.'};
-  // Read both ways, then redo any reading that missed the serving size using the one that found it.
-  let A=parseNip(nipLines),B=tableLines.length?parseNip(tableLines):null;
-  const pickSs=[A.servingSize,B?.servingSize].find(s=>s&&s.value!=null&&!s.inferred)||[A.servingSize,B?.servingSize].find(s=>s&&s.value!=null);
-  if(pickSs){if(A.servingSize.value!==pickSs.value)A=parseNip(nipLines,{...pickSs});if(B&&B.servingSize.value!==pickSs.value)B=parseNip(tableLines,{...pickSs});}
-  let nip=mergeNip(A,B);
-  // Column-position reading (and its numbers-only re-read) wins ties: it knows which column each number is in.
-  // Not used for US per-serving-only panels, which have a single number column.
-  if(colLines.length&&!nip.perServeOnly){const ss0=nip.servingSize.value!=null?{...nip.servingSize}:undefined;
-   const C=parseNip(colLines,ss0),D=altLines.length?parseNip(altLines,ss0):null;nip=mergeNip(D?mergeNip(C,D):C,nip);}
+  // Combine every reading (normal, table, column, numbers-only, and the extra greyscale/bold readings when the first
+  // pass wasn't clean): one serving size for all, then row by row the reading that adds up, preferring agreement.
+  const nip=combineReadings([nipLines,tableLines,...extraTables].filter(a=>a.length),[colLines,altLines,...extraCols].filter(a=>a.length));
   energyBalanceFix(nip);hierarchyCheck(nip);
-  const x={source:`On-device reading of ${imgs.length} photo${imgs.length===1?'':'s'}${texts.length?' and pasted text':''}, ${day(now())}`,servingSize:nip.servingSize,servingsPerPack:nip.servingsPerPack,nutrients:{},ingredientsText:ingTexts.map(parseIngredients).filter(Boolean).join(', '),warnings,transcript:transcript.join('\n\n')};
+  const x={source:`On-device reading of ${imgs.length} photo${imgs.length===1?'':'s'}${texts.length?' and pasted text':''}, ${day(now())}`,servingSize:nip.servingSize,servingsPerPack:nip.servingsPerPack,nutrients:{},ingredientsText:ingTexts.map(parseIngredients).filter(Boolean).join(', '),warnings,transcript:transcript.join('\n\n'),snips};
   for(const {k,unit} of NUTS)x.nutrients[k]=nip.nutrients[k]||{unit,perServing:null,per100:null,flag:{type:'missing',note:'Not found in the photo or text.',status:'open'}};
   if(nip.liquid)p.physical='liquid';
   if(nip.perServeOnly)x.perServeOnly=true;if(nip.multiCol)x.multiCol=true;
@@ -1575,6 +1652,8 @@ function autoAccept(p){const x=p.extracted,ss=num(x.servingSize?.value),iss=issu
   if(n.perServing==null){n.flag={type:'missing',status:'open',orig:n.flag.orig,note:`Only one ${nm} number was found, so PackPick can't tell which column it belongs to. Type both numbers from the pack.`};continue;}
   if(i&&i.type==='conflict'){n.flag={type:'conflict',status:'open',orig:n.flag.orig,note:i.note+' Type the right number from the pack.'};continue;}
   if(!ss){n.flag={...n.flag,status:'open',note:'The serving size is missing, so this row couldn\'t be double-checked. Add the serving size.'};continue;}
+  // Several repairs in one row (or a missing digit) are a guess, even if the result adds up: leave it for a person.
+  if(n.flag.risky){n.flag={...n.flag,status:'open',type:'blurry'};continue;}
   n.flag={...n.flag,status:'auto'};}}
 function applyExtraction(p,x){for(const {k} of NUTS){const n=x.nutrients[k];if(n)n.orig=null;if(n?.flag)n.flag.orig=`${n.perServing??'—'} / ${n.per100??'—'}`;}
  p.extracted=x;mergeFlags(p,null);autoAccept(p);p.confirmed=false;syncConfirm(p);p.unconfirmedNote='';S.chk=false;S.step='review';saveProduct(p);}
@@ -1637,7 +1716,9 @@ document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-ac
  case 'cropWhole':S.cropFirst=false;S.cropId=null;S.cropRect=null;return runQuick();
  case 'qRetake':{const id=S.cropId;p.captures=(p.captures||[]).filter(x=>x.id!==id);delete S.mem[id];await saveProduct(p);S.cropId=null;S.cropFirst=false;S.view=p.extracted?'result':'quick';S.pickMode='quickAdd';$('#fileCam').click();break;}
  case 'qMk':S.qMk=!S.qMk;break;
- case 'qmtog':{const s0=new Set(p.markets||[]);s0.has(b.dataset.code)?s0.delete(b.dataset.code):s0.add(b.dataset.code);if(!s0.size){toast('Keep at least one market.');return;}const order=(S.markets?.list||[]).map(m=>m.code);p.markets=[...s0].sort((x,y)=>order.indexOf(x)-order.indexOf(y));setQMarkets(p.markets);saveProduct(p);return;}
+ case 'qmAll':{p.markets=(S.markets?.list||[]).map(m=>m.code);setQMarkets(p.markets);saveProduct(p);return;}
+ case 'qmNone':{p.markets=[];S.qMk=true;saveProduct(p);return;}
+ case 'qmtog':{const s0=new Set(p.markets||[]);s0.has(b.dataset.code)?s0.delete(b.dataset.code):s0.add(b.dataset.code);const order=(S.markets?.list||[]).map(m=>m.code);p.markets=[...s0].sort((x,y)=>order.indexOf(x)-order.indexOf(y));setQMarkets(p.markets);saveProduct(p);return;}
  case 'qConfirm':if(openFlags(p).length){toast('Fix the numbers marked in red first.');return;}p.confirmed=true;p.confirmedBy=S.me.id||'Name not set';p.confirmedAt=now();p.confirmedHash=dataHash(p);p.unconfirmedNote='';saveProduct(p);toast('Values confirmed against the pack');return;
  case 'copy2':{if(b.dataset.ok!=='1'){toast(b.dataset.why||'Not ready to copy.');if(/Confirm values/.test(b.dataset.why||''))$('#confirmBox')?.scrollIntoView({block:'center'});return;}const w=b.dataset.w;try{await navigator.clipboard.writeText(w);toast('Copied: '+w.replace(/\n/g,' · '));}catch(e){toast('Copy didn\'t work here. Select the wording and copy it by hand.');}return;}
  case 'focusRow':{const el=document.getElementById(b.dataset.id);if(el){el.scrollIntoView({block:'center'});el.focus();}return;}
@@ -1719,6 +1800,7 @@ document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-ac
  render();});
 
 document.addEventListener('change',ev=>{const t=ev.target;const f=t.dataset.f;if(!f)return;const p=P();
+ if(f==='snips'){S.showSnips=t.checked;try{localStorage.setItem('packpick.snips',t.checked?'1':'');}catch(e){}render();return;}
  if(f==='rmsel'){S.rulesMarket=t.value;S.editRule=null;S.addingRule=false;render();return;}
  if(f==='chk'){S.chk=t.checked;render();return;}
  if(!p)return;
@@ -1782,7 +1864,7 @@ function saveFile(name,data,type){const b=data instanceof Blob?data:new Blob([da
 const blobToDataUrl=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(b);});
 
 /* ---------- you (no logins in this version) ---------- */
-function loadMe(){try{const m=JSON.parse(localStorage.getItem('packpick.me')||'{}');S.me={id:m.name||null};S.role=['qa','npd'].includes(m.role)?m.role:'packaging';}catch(e){S.me={id:null};}S.canEdit=S.role==='qa';}
+function loadMe(){try{S.showSnips=!!localStorage.getItem('packpick.snips');}catch(e){}try{const m=JSON.parse(localStorage.getItem('packpick.me')||'{}');S.me={id:m.name||null};S.role=['qa','npd'].includes(m.role)?m.role:'packaging';}catch(e){S.me={id:null};}S.canEdit=S.role==='qa';}
 function saveMe(name,role){S.me={id:name||null};S.role=role;S.canEdit=role==='qa';try{localStorage.setItem('packpick.me',JSON.stringify({name,role}));}catch(e){toast('This browser won\'t save settings (private mode?).');}}
 function vSettings(){return `<div class="stack"><h1>You</h1><div class="panel stack"><p class="small muted" style="margin:0">Your name is recorded on values you confirm, evidence you add and any QA approvals. It's saved on this device only.</p>
  <label class="fld" style="max-width:360px">Your name<input id="me-name" value="${esc(S.me.id||'')}" autocomplete="name"></label>
