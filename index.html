@@ -1271,6 +1271,28 @@ const TR={
  ae:{n:'United Arab Emirates',lang:'Arabic',ev:'unverified',src:'No official wording found yet. Not the same as Saudi Arabia.',en:'both',salt:'sodium',rtl:1,
   t:['معلومات غذائية','عدد الحصص في العبوة','حجم الحصة','لكل حصة','لكل 100 غ','الطاقة','البروتين','الدهون الكلية','الدهون المشبعة','الدهون المتحولة','الكربوهيدرات','السكريات','الألياف الغذائية','الصوديوم','الملح','البوتاسيوم']}};
 const EV_LABEL={legal:'Legal wording',example:'Official example',unverified:'Unverified'};
+// Panel titles seen on real pack photos (export photo audit, 20 Nov 2026). Sample evidence only:
+// counts are photos with a readable title in that market, not a share of the whole market, and the
+// audit counted titles only (not row words). Kept apart from the legal wording above.
+// rv = packs mostly print a different title from ours: shown for review, never swapped automatically.
+const TR_SEEN={
+ cl:{t:'INFORMACIÓN NUTRICIONAL',n:51,of:55,note:'usually in capitals'},
+ gt:{t:'Información nutricional',n:25,of:48,note:'others: “Datos Nutricionales”, “Información Nutrimental”'},
+ pa:{t:'Información nutricional',n:21,of:45,note:'often printed with “Nutrition Facts”'},
+ ro:{t:'Declarație nutrițională',n:32,of:99,note:'others: “Informații nutriționale”, “Valori medii nutriționale”'},
+ sl:{t:'Hranilna vrednost',n:51,of:99,note:'next: “Povprečna hranilna vrednost” (24)'},
+ fr:{t:'Valeurs nutritionnelles moyennes',n:11,of:99,note:'New Caledonia packs; France itself not audited'},
+ ms:{t:'Maklumat Pemakanan / Nutrition Information',n:13,of:69,note:'many packs are English only'},
+ id:{t:'INFORMASI NILAI GIZI',n:8,of:9,note:'usually with an English title'},
+ vi:{t:'Giá trị dinh dưỡng',n:4,of:21,rv:1,note:'also “Thành phần dinh dưỡng” (2); many packs are English only'},
+ th:{t:'ข้อมูลโภชนาการ',n:15,of:18},
+ zh:{t:'营养成分表',n:47,of:47},
+ sa:{t:'حقائق تغذوية',n:22,of:87,note:'usually with “Nutrition Facts”; also “الحقائق التغذوية” (7)'},
+ ae:{t:'حقائق تغذوية',n:13,of:94,rv:1,note:'also “حقائق غذائية” (8); usually with “Nutrition Facts”'}};
+// English title most often printed alongside the local one, for markets where two-language titles are common.
+const TR_BI={ms:'Nutrition Information',id:'Nutrition Facts',th:'Nutrition Facts',sa:'Nutrition Facts',ae:'Nutrition Facts',zh:'Nutrition Information'};
+const trTitle=lang=>trT(lang,'title')+(S.trBi&&TR_BI[lang]?' / '+TR_BI[lang]:'');
+function trSeenTxt(lang){const s=TR_SEEN[lang];if(!s)return '';return `“${s.t}” on ${s.n} of ${s.of} pack photos${s.of<30?' (small sample)':''}${s.note?'; '+s.note:''}`;}
 const trT=(lang,key)=>TR[lang].t[TR_KEYS.indexOf(key)];
 const trUv=(lang,key)=>TR[lang].ev==='unverified'||(TR[lang].uv||[]).includes(key);
 const EN_T=['Nutrition Information','Servings per package','Serving size','Per serving','Per 100 g','Energy','Protein','Fat, total','– saturated','– trans','Carbohydrate','– sugars','Dietary fibre','Sodium','Salt','Potassium'];
@@ -1292,7 +1314,8 @@ function trText(p,lang){const x=p.extracted;const L=TR[lang];const rows=trRows(p
  const out=[trT(lang,'title'),`${trT(lang,'spp')}: ${x.servingsPerPack?(L.dc?String(x.servingsPerPack).replace('.',','):x.servingsPerPack):'—'}`,`${trT(lang,'ss')}: ${trNum(x.servingSize?.value,lang)} ${trU(lang,x.servingSize?.unit||'g')}`,`\t${trT(lang,'ps')}\t${trT(lang,'p100')}`];
  for(const {k,n} of rows)out.push(`${trT(lang,k)}\t${trCell(n,'perServing',lang,k)}\t${trCell(n,'per100',lang,k)}`);
  const uv=['title','spp','ss','ps','p100',...rows.map(r=>r.k)].filter(k=>trUv(lang,k)).map(k=>trT(lang,k));
- out.push('',`Wording: ${EV_LABEL[L.ev]} · ${L.src}`);if(uv.length)out.push(`Not confirmed: ${uv.join(', ')}`);
+ out[0]=trTitle(lang);
+ out.push('',`Wording: ${EV_LABEL[L.ev]} · ${L.src}`);if(TR_SEEN[lang])out.push(`${TR_SEEN[lang].rv?'REVIEW title. ':''}Seen on packs: ${trSeenTxt(lang)}`);if(uv.length)out.push(`Not confirmed: ${uv.join(', ')}`);
  if(rows.some(r=>r.calc))out.push('Salt worked out from sodium (× 2.5).');return out.join('\n');}
 const trLangs=()=>Object.keys(TR).filter(c=>(S.trLangs||['es']).includes(c));
 function vTranslate(){const ps=Object.values(S.products).filter(p=>p.extracted).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
@@ -1302,7 +1325,8 @@ function vTranslate(){const ps=Object.values(S.products).filter(p=>p.extracted).
   const lab=(key)=>`${esc(trT(lang,key))}${trUv(lang,key)?'<sup class="tr-uv" title="Wording not confirmed">?</sup>':''}${en?`<span class="tr-en">${esc(EN_T[TR_KEYS.indexOf(key)])}</span>`:''}`;
   return `<div class="stack" style="gap:6px"><div class="spread"><span class="label">${esc(L.n)} · ${esc(L.lang)}</span><span class="tr-ev tr-ev-${L.ev}">${esc(EV_LABEL[L.ev])}</span></div>
   <div class="small muted">${esc(L.src)}${L.note?' · '+esc(L.note):''}</div>
-  <div class="nipcard trcard" dir="${L.rtl?'rtl':'ltr'}" lang="${esc(TRLANG[L.lang]||'')}"><div class="niphead">${lab('title')}</div>
+  ${TR_SEEN[lang]?`<div class="small ${TR_SEEN[lang].rv?'banner warn':'muted'}">${TR_SEEN[lang].rv?`<b>Review title:</b> packs mostly print a different title from this panel. `:''}<b>Seen on packs:</b> <span dir="ltr">${esc(trSeenTxt(lang)).replace(/“([^”]*)”/g,'“<bdi>$1</bdi>”')}</span>. Sample only, not the whole market.</div>`:''}
+  <div class="nipcard trcard" dir="${L.rtl?'rtl':'ltr'}" lang="${esc(TRLANG[L.lang]||'')}"><div class="niphead">${lab('title')}${S.trBi&&TR_BI[lang]?` / <bdi lang="en">${esc(TR_BI[lang])}</bdi>`:''}</div>
   <div class="small" style="margin:6px 0">${lab('spp')}: ${esc(x.servingsPerPack?(L.dc?String(x.servingsPerPack).replace('.',','):x.servingsPerPack):'—')}<br>${lab('ss')}: ${esc(trNum(x.servingSize?.value,lang))} ${esc(trU(lang,x.servingSize?.unit||'g'))}</div>
   <table class="nip trtab"><thead><tr><th></th><th class="n">${lab('ps')}</th><th class="n">${lab('p100')}</th></tr></thead><tbody>
   ${rows.map(({k,n,calc})=>`<tr><td>${lab(k)}${calc?'<span class="tr-en">from sodium × 2.5</span>':''}</td><td class="n" dir="ltr">${esc(trCell(n,'perServing',lang,k))}</td><td class="n" dir="ltr">${esc(trCell(n,'per100',lang,k))}</td></tr>`).join('')}
@@ -1316,10 +1340,10 @@ function vTranslate(){const ps=Object.values(S.products).filter(p=>p.extracted).
  <div class="banner warn small"><b>Draft · translation not verified.</b> A native speaker and QA must check every word, and each country's panel format, before artwork.${p.confirmed?'':' The values haven\'t been confirmed against the pack yet.'}</div>
  ${openFlags(p).length?`<div class="banner err small"><b>${openFlags(p).length} number${openFlags(p).length>1?'s':''} on this pack still need fixing.</b> <button class="mini" data-act="open" data-id="${p.id}">Fix them</button></div>`:''}
  ${langs.length?langs.map(panel).join(''):`<div class="panel small muted">Choose a language above.</div>`}
- <div class="row"><button class="primary" data-act="trCopy" ${langs.length?'':'disabled'}>Copy ${langs.length>1?'all':''}</button><button data-act="trCsv" ${langs.length?'':'disabled'}>Download CSV</button><label class="chk small" style="margin-left:auto"><input type="checkbox" data-tr="en" ${en?'checked':''}><span>Show English</span></label></div>
+ <div class="row"><button class="primary" data-act="trCopy" ${langs.length?'':'disabled'}>Copy ${langs.length>1?'all':''}</button><button data-act="trCsv" ${langs.length?'':'disabled'}>Download CSV</button><label class="chk small" style="margin-left:auto" title="Adds the English title most often printed next to the local one (Malaysia, Indonesia, Thailand, China, Saudi Arabia, UAE)"><input type="checkbox" data-tr="bi" ${S.trBi?'checked':''}><span>Local + English title</span></label><label class="chk small"><input type="checkbox" data-tr="en" ${en?'checked':''}><span>Show English</span></label></div>
  <p class="small muted" style="margin:0"><sup class="tr-uv">?</sup> = wording not confirmed by an official source. Numbers are the checked values from the pack. Energy in kcal is kJ ÷ 4.184; each market shows kJ, kcal or both as its rules say. A gluten or “not detected” line isn't added: check each market's rules first.${x.ingredientsText?' Ingredients aren\'t translated here yet.':''}</p></div>`;}
 const TRLANG={Spanish:'es',German:'de',French:'fr',Danish:'da',Romanian:'ro',Slovenian:'sl',Malay:'ms',Indonesian:'id',Vietnamese:'vi',Thai:'th','Chinese (Simplified)':'zh-Hans',Arabic:'ar'};
-document.addEventListener('change',e=>{const s=e.target.closest&&e.target.closest('[data-tr]');if(!s)return;if(s.dataset.tr==='pid')S.trPid=s.value;if(s.dataset.tr==='en')S.trEn=s.checked;render();});
+document.addEventListener('change',e=>{const s=e.target.closest&&e.target.closest('[data-tr]');if(!s)return;if(s.dataset.tr==='pid')S.trPid=s.value;if(s.dataset.tr==='en')S.trEn=s.checked;if(s.dataset.tr==='bi')S.trBi=s.checked;render();});
 
 /* ---------- import from a spreadsheet (one row per SKU) ---------- */
 const IMP_FIELDS=[['sku','SKU',/\bsku\b|item\s*code|product\s*code|article/],['barcode','Barcode (EAN/UPC)',/barcode|\bean\b|gtin|\bupc\b/],['name','Product name',/product\s*name|^name$|^product$|description/],['brand','Brand',/brand/],['packVersion','Pack version',/pack\s*version|artwork|version/],
