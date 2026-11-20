@@ -1645,9 +1645,20 @@ function pickPair(A,B,ss){let best=null,origFit=false;
 // (1.3 means 1.25–1.35), plus 3% for how the panel was calculated. Much tighter than a flat percentage.
 const decs=v=>{const m=String(+(+v).toFixed(6)).split('.')[1];return m?m.length:0;};
 function consTol(a,b,ss){const e=b*ss/100;return 0.5*10**-decs(a)+0.5*10**-decs(b)*ss/100+e*0.03;}
+// A gram value under 10 printed without a decimal next to one with a decimal ("7.6 g / 5 g"). Panels almost always
+// print these the same way in both columns, so the whole number was probably misread.
+// A printed "1.0" is stored as 1, so a whole number only counts as odd if, read as "X.0", it doesn't match the serving size.
+function oddInteger(n,ss){if(!n||!ss||n.unit!=='g'||n.perServing==null||n.per100==null||n.q?.perServing||n.q?.per100)return false;
+ const di=v=>Number.isInteger(v),dd=v=>!Number.isInteger(v);
+ if(!((di(n.per100)&&n.per100>0&&n.per100<10&&dd(n.perServing))||(di(n.perServing)&&n.perServing>0&&n.perServing<10&&dd(n.per100))))return false;
+ const e=n.per100*ss/100;return Math.abs(n.perServing-e)>(0.05+0.05*ss/100)*1.2;}
 // Two readings of the same photo: keep, row by row, the one that is complete and adds up.
-function rowScore(n,ss){if(!n)return 9;if(n.perServing==null&&n.per100==null)return 8;if(n.perServing==null||n.per100==null)return 6;
+function rowScore(n,ss){if(!n)return 9;if(n.perServing==null&&n.per100==null)return 8;
+ // One number whose column was only guessed loses to a reading that placed it by column position.
+ if(n.perServing==null||n.per100==null)return n.colGuess?8.5:6;
  let s=n.flag?(n.flag.type==='blurry'?(n.flag.risky?3:1):4):0;
+ // "7.6 / 5" in a panel that prints grams with a decimal: the "5" is probably "5.4" with digits lost.
+ if(oddInteger(n,ss))s+=1;
  if(ss&&!n.derived){const e=n.per100*ss/100;const tol=n.unit==='kJ'||n.unit==='kcal'?Math.max(e*.04,3):consTol(n.perServing,n.per100,ss);if(Math.abs(n.perServing-e)>tol)s+=5;}return s;}
 function mergeNip(a,b){if(!b)return a;const out={...a,nutrients:{}};
  if((a.servingSize.value==null||a.servingSize.inferred)&&b.servingSize.value!=null&&!(b.servingSize.inferred&&a.servingSize.value!=null))out.servingSize=b.servingSize;if(!a.servingsPerPack&&b.servingsPerPack)out.servingsPerPack=b.servingsPerPack;out.liquid=a.liquid||b.liquid;out.perServeOnly=a.perServeOnly||b.perServeOnly;out.multiCol=a.multiCol||b.multiCol;out.glutenNotDetected=a.glutenNotDetected||b.glutenNotDetected;
@@ -1658,7 +1669,10 @@ function mergeNip(a,b){if(!b)return a;const out={...a,nutrients:{}};
 function energyBalanceFix(nip){const ns=nip.nutrients;const en=ns.energy_kj;if(!en)return;const ssv=nip.servingSize?.value;
  // Per serving energy unreadable (missing, 0, or wildly off) but per 100 g and the serving size are clear: work it
  // out, and leave it for a person to confirm (the pack's own rounding may differ by a few kJ).
- if(ssv&&en.per100>0&&!nip.perServeOnly){const e=en.per100*ssv/100;if(en.perServing==null||en.perServing<=0||en.perServing<e/4||en.perServing>e*4){const o=en.perServing;en.perServing=Math.round(e);en.q={...(en.q||{}),perServing:null};
+ // Only when the per serving number was read (as 0 or nonsense): a lone number may itself be the per serving one.
+ if(ssv&&en.per100==null&&en.perServing>0&&!en.colGuess&&!nip.perServeOnly){const e=en.perServing*100/ssv;en.per100=Math.round(e);
+  en.flag={type:'blurry',risky:true,status:'open',note:`The per 100 g energy couldn't be read. Worked out from ${en.perServing} ${en.unit} per serving ÷ ${ssv} g: about ${Math.round(e)} ${en.unit}. Type the exact number from the pack.`};}
+ if(ssv&&en.per100>0&&en.perServing!=null&&!en.colGuess&&!nip.perServeOnly){const e=en.per100*ssv/100;if(en.perServing<=0||en.perServing<e/4||en.perServing>e*4){const o=en.perServing;en.perServing=Math.round(e);en.q={...(en.q||{}),perServing:null};
   en.flag={type:'blurry',risky:true,status:'open',note:`${o==null?'The per serving energy couldn\'t be read':`The per serving energy read as ${o}`}. Worked out from ${en.per100} ${en.unit} per 100 g × ${ssv} g: about ${Math.round(e)} ${en.unit}. Type the exact number from the pack.`};}}
  // Per 100 g energy unreadable or inconsistent? Per serving ÷ serving size gives it for this check (not shown on the panel).
  let p100=en.per100;if(en.perServing!=null&&ssv&&(p100==null||Math.abs(en.perServing-p100*ssv/100)>Math.max(p100*ssv/100*.04,3)))p100=en.perServing*100/ssv;
@@ -1707,6 +1721,14 @@ function hierarchyCheck(nip){const ns=nip.nutrients;
    const o=`${P.perServing} / ${P.per100}`;P.perServing=+(P.perServing/10).toFixed(2);P.per100=+(P.per100/10).toFixed(2);
    P.flag={type:'blurry',status:'open',note:`Read as ${o}, which is more than ${wl.toLowerCase()}. The decimal points were probably missed, so PackPick used ${P.perServing} / ${P.per100}. Check against the pack.`};continue;}
   for(const c of ['perServing','per100']){if(W[c]!=null&&P[c]!=null&&W[c]+1e-9<P[c]&&W.q?.[c]!=='<'){W.flag={type:'conflict',status:'open',note:`${wl} (${W[c]}) is less than ${pl} (${P[c]}), which can't be right. Check this row against the pack.`};break;}}}}
+// Last look before showing the panel: rows that only pass because the check allows some slack are left for a person.
+// (1) A repaired row that still doesn't match the serving size within printing rounding ("12.1 / 8.5" for a 140 g
+// serving: 8.5 × 1.4 = 11.9). (2) A whole number under 10 g next to a decimal ("7.6 / 5").
+function finalChecks(nip){const ns=nip.nutrients,ss=nip.servingSize?.value;if(!ss||nip.perServeOnly)return;
+ for(const {k} of NUTS){const n=ns[k];if(!n||n.unit!=='g'||n.perServing==null||n.per100==null||n.q?.perServing||n.q?.per100)continue;
+  if(oddInteger(n,ss)){n.flag={type:'blurry',risky:true,status:'open',note:`Read as ${n.perServing} / ${n.per100}. One column has a decimal and the other doesn't, so a digit was probably lost. Check against the pack.`};continue;}
+  if(n.flag&&n.flag.type==='blurry'&&!n.flag.risky){const e=n.per100*ss/100,rnd=Math.max(.06,0.5*10**-decs(n.perServing)+0.5*10**-decs(n.per100)*ss/100);
+   if(Math.abs(n.perServing-e)>rnd*1.2)n.flag={...n.flag,risky:true,status:'open',note:n.flag.note+` It still doesn't quite match the serving size (${fmt(n.per100)} × ${ss/100} = ${fmt(e,2)}), so check both numbers.`};}}}
 // Serving size from the panel itself: per-serving ÷ per-100 g for energy, checked against sodium.
 function inferServing(ns){const r=k=>{const n=ns[k];if(!n||n.perServing==null||!n.per100)return null;return n.perServing/n.per100*100;};
  const e=r('energy_kj'),s=r('sodium_mg');if(e==null)return null;if(e<2||e>500)return null;if(s!=null&&Math.abs(s-e)/e>.06)return null;
@@ -1778,7 +1800,7 @@ function parseNip(lines,forcedSs){lines=splitDoubleRows(lines||[]);
   else if(toks.length===1&&ltN>=2&&toks[0].lt&&!single){n.perServing=n.per100=toks[0].v;n.q.perServing=n.q.per100='<';n.flag={type:'blurry',risky:true,status:'open',note:`Both columns look like "less than ${toks[0].v} ${unit}", but only one number was clear. Check against the pack.`};}
   else if(toks.length===1&&single==='ps'){n.perServing=toks[0].v;n.q.perServing=toks[0].lt?'<':null;n.flag={type:'missing',note:'Only the per-serving number was found in this row.',status:'open'};}
   else if(toks.length===1&&single==='p100'){n.per100=toks[0].v;n.q.per100=toks[0].lt?'<':null;n.flag={type:'missing',note:'Only the per 100 g number was found in this row.',status:'open'};}
-  else if(toks.length===1){n.per100=toks[0].v;n.q.per100=toks[0].lt?'<':null;n.flag={type:'missing',note:'Only one number found on this line. It went into the per-100 column. Check which column it belongs to.',status:'open'};}
+  else if(toks.length===1){n.per100=toks[0].v;n.q.per100=toks[0].lt?'<':null;n.colGuess=true;n.flag={type:'missing',note:'Only one number found on this line. It went into the per-100 column. Check which column it belongs to.',status:'open'};}
   // "5.g" or "1.": a digit after the decimal point is missing, so the number can't be trusted.
   if(/\d\.(?!\d)\s*(?:g|mg|kj|$|\s)/i.test(t)&&(n.perServing!=null||n.per100!=null))n.flag={type:'blurry',risky:true,status:'open',note:'A digit after a decimal point is missing in the photo. Type this row from the pack.'};
   if(!n.flag&&mn)n.flag={type:'blurry',note:'Part of a number looked like a letter (e.g. "N7" for 11.7). PackPick read it as 11. Check against the pack.',status:'open'};
@@ -1814,7 +1836,7 @@ async function extract(){const p=P();S.err='';const caps=p.captures||[];
   // Combine every reading (normal, table, column, numbers-only, and the extra greyscale/bold readings when the first
   // pass wasn't clean): one serving size for all, then row by row the reading that adds up, preferring agreement.
   const nip=combineReadings([nipLines,tableLines,...extraTables].filter(a=>a.length),[colLines,altLines,...extraCols].filter(a=>a.length));
-  energyBalanceFix(nip);hierarchyCheck(nip);
+  energyBalanceFix(nip);hierarchyCheck(nip);finalChecks(nip);
   const x={source:`On-device reading of ${imgs.length} photo${imgs.length===1?'':'s'}${texts.length?' and pasted text':''}, ${day(now())}`,servingSize:nip.servingSize,servingsPerPack:nip.servingsPerPack,nutrients:{},ingredientsText:ingTexts.map(parseIngredients).filter(Boolean).join(', '),warnings,transcript:transcript.join('\n\n'),snips};
   for(const {k,unit} of NUTS)x.nutrients[k]=nip.nutrients[k]||{unit,perServing:null,per100:null,flag:{type:'missing',note:'Not found in the photo or text.',status:'open'}};
   if(nip.liquid)p.physical='liquid';
