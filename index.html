@@ -190,6 +190,8 @@ button{min-height:44px}button.small{min-height:40px}button.mini{min-height:34px}
 button.qopt:hover{border-color:var(--ink)}
 .qicon{width:34px;height:34px;border-radius:8px;background:var(--hl);color:var(--hl-ink);display:grid;place-items:center;font-size:1.1rem}
 .tr-en{display:block;font-size:.72rem;color:var(--muted);font-weight:400}
+.tr-uv{color:#d29922;font-weight:700;margin-left:2px}.tr-ev{font-size:.72rem;padding:2px 8px;border-radius:999px;border:1px solid var(--line,#444);white-space:nowrap}
+.tr-ev-legal{color:#3fb06b;border-color:#3fb06b}.tr-ev-example{color:#4c9be8;border-color:#4c9be8}.tr-ev-unverified{color:#d29922;border-color:#d29922}
 .trcard[dir=rtl] .trtab td,.trcard[dir=rtl] .trtab th{text-align:right}.trcard[dir=rtl] .trtab .n{text-align:left}
 .trtab td{padding:7px 4px;border-bottom:1px solid var(--line)}
 .scanbox{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3}.scanbox video{width:100%;height:100%;object-fit:cover;display:block}
@@ -209,7 +211,7 @@ tr.sniprow td{padding:0 0 8px;border-top:0}
 .cmpcard{display:flex;flex-direction:column;gap:8px;padding:12px}.cmphead{display:flex;gap:10px;align-items:center}
 .cmpgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.cmpcell{display:flex;flex-direction:column;gap:1px;background:color-mix(in srgb,var(--ink) 5%,transparent);border-radius:6px;padding:5px 6px;min-width:0}
 .cmpcell span{font-size:.7rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cmpcell b{font-size:.95rem}
-.cmpbetter{color:#3fb06b}.cmpworse{color:#e5534b}.cmpcard.cmpme{border:2px solid var(--hl)}
+.cmpbetter{color:#3fb06b}.cmpworse{color:#e5534b}.cmparr{font-style:normal;font-size:.75em;margin-left:3px}.cmpcard.cmpme{border:2px solid var(--hl)}
 .qtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;max-width:560px;width:100%;margin:8px auto 4px}
 .qtile{display:flex;flex-direction:column;align-items:center;gap:8px;background:none;border:0;padding:6px 0;font-weight:600;font-size:.9rem;color:var(--ink);min-height:auto}
 .qcirc{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;transition:transform .15s}.qtile:active .qcirc{transform:scale(.94)}
@@ -1065,12 +1067,14 @@ function vCompare(){const p=P();if(!p?.extracted)return vQuick();const C=S.cmp||
  <div class="cmpcards">${all.map(q=>{const ours=claimsFor(q,C.market);return `<div class="panel cmpcard ${q===me?'cmpme':''}">
   <div class="cmphead">${q.img?`<img src="${esc(q.img)}" alt="" class="cmpimg">`:''}<div style="min-width:0"><b>${esc(q.name)}</b>${q===me?' <span class="chip st-approved">Yours</span>':''}<div class="small muted">${esc(q.brand)}</div></div></div>
   <div class="cmpgrid">${CMP_COLS.map(([k,l,u,dir])=>{const v=val(q,k),mv=val(me,k);
-   // Red: this product beats yours on this number. Green: yours is better or the same.
-   const cls=q!==me&&v!=null&&mv!=null&&dir!==0?((dir<0?v<mv-1e-9:v>mv+1e-9)?'cmpworse':'cmpbetter'):'';
-   return `<div class="cmpcell"><span>${l}</span><b class="mono ${cls}">${v==null?'—':esc(fmt(v))}</b></div>`;}).join('')}</div>
+   // Arrow: more or less than yours. Colour: whether that's good (green) or bad (red) for this product,
+   // e.g. less protein than yours = ▼ red; less fat than yours = ▼ green. Same as yours = no arrow, green.
+   let arr='',cls='';if(q!==me&&v!=null&&mv!=null){const d=v-mv;arr=Math.abs(d)<1e-9?'':d>0?'▲':'▼';
+    if(dir!==0)cls=Math.abs(d)<1e-9?'cmpbetter':((dir<0?d<0:d>0)?'cmpbetter':'cmpworse');}
+   return `<div class="cmpcell"><span>${l}</span><b class="mono ${cls}">${v==null?'—':esc(fmt(v))}${arr?`<i class="cmparr" title="${arr==='▲'?'more':'less'} than yours">${arr}</i>`:''}</b></div>`;}).join('')}</div>
   ${q===me?'':`<div class="small"><b>On pack:</b> ${(q.onPack||[]).length?esc(q.onPack.join(', ')):'<span class="muted">not recorded</span>'}</div>`}
   <div class="small"><b>Could claim:</b> ${ours.length?esc(ours.join(', ')):'<span class="muted">none</span>'}</div></div>`;}).join('')}</div>
- <div class="small muted"><span class="cmpbetter">Green</span>: yours is better or the same. <span class="cmpworse">Red</span>: theirs is better (lower fat, saturated fat, sugars or sodium; higher fibre or protein). Energy isn't coloured.</div>`:''}
+ <div class="small muted">▲ more than yours · ▼ less than yours. <span class="cmpbetter">Green</span> = better for that product (less fat, saturated fat, sugars or sodium; more fibre or protein), or the same as yours. <span class="cmpworse">Red</span> = worse. Energy gets an arrow only.</div>`:''}
  <p class="small muted disclaim" style="margin:0">${DISCLAIMER}</p></div>`;}
 document.addEventListener('change',e=>{const s=e.target.closest&&e.target.closest('[data-cmp]');if(!s||!S.cmp)return;S.cmp.market=s.value;render();});
 
@@ -1223,53 +1227,98 @@ async function productFromOff(code,o){const p=await newQuickProduct(false);const
  applyExtraction(p,x);S.pid=p.id;S.view='result';window.scrollTo(0,0);toast('Found in Open Food Facts. Check the values.');render();}
 
 /* ---------- translate the nutrition panel (draft wording, not verified) ---------- */
-// Row names for each language. Drafted by Claude from common label wording (EU languages follow the
-// Regulation 1169/2011 Annex XV terms). Every term needs a native-speaker and QA check before use.
-const TR_KEYS=['title','spp','ss','ps','p100','energy_kj','protein_g','fat_total_g','fat_saturated_g','fat_trans_g','carbohydrate_g','sugars_g','dietary_fibre_g','sodium_mg','salt_g','potassium_mg','gluten','nd'];
+// One panel per market (market and language kept apart: Chile Spanish isn't Spain Spanish).
+// Wording from the official texts where they set it (research Nov 2026, no pack survey yet):
+//  ev  'legal'   = term set by the regulation; 'example' = from an official example or guidance;
+//      'unverified' = nothing official found. Terms in uv[] are unverified even in a legal set.
+//  en  energy shown as 'kJ', 'kcal' or 'both' · salt: 'salt' (EU: salt row, no sodium row),
+//      'sodium' (sodium row only) · dc = decimal comma · um = local unit names.
+// Every panel stays Draft until a native speaker and QA sign it off.
+const TR_KEYS=['title','spp','ss','ps','p100','energy_kj','protein_g','fat_total_g','fat_saturated_g','fat_trans_g','carbohydrate_g','sugars_g','dietary_fibre_g','sodium_mg','salt_g','potassium_mg'];
+const EU_UV=['title','spp','ss','ps','p100','fat_trans_g','sodium_mg'];
+const EU_SRC='EU Regulation 1169/2011, Annex XV';
 const TR={
- es:{n:'Spanish',t:['Información nutricional','Porciones por envase','Tamaño de la porción','Por porción','Por 100 g','Valor energético','Proteínas','Grasas','de las cuales saturadas','de las cuales trans','Hidratos de carbono','de los cuales azúcares','Fibra alimentaria','Sodio','Sal','Potasio','Gluten','No detectado'],dc:1,note:'Latin American markets often use “Carbohidratos” and “Grasa total”. Check per country.'},
- de:{n:'German',t:['Nährwertangaben','Portionen pro Packung','Portionsgröße','Pro Portion','Pro 100 g','Energie','Eiweiß','Fett','davon gesättigte Fettsäuren','davon Transfettsäuren','Kohlenhydrate','davon Zucker','Ballaststoffe','Natrium','Salz','Kalium','Gluten','Nicht nachweisbar'],dc:1},
- da:{n:'Danish',t:['Næringsindhold','Portioner pr. pakning','Portionsstørrelse','Pr. portion','Pr. 100 g','Energi','Protein','Fedt','heraf mættede fedtsyrer','heraf transfedtsyrer','Kulhydrat','heraf sukkerarter','Kostfibre','Natrium','Salt','Kalium','Gluten','Ikke påvist'],dc:1},
- ar:{n:'Arabic',t:['معلومات غذائية','عدد الحصص في العبوة','حجم الحصة','لكل حصة','لكل 100 غ','الطاقة','البروتين','الدهون الكلية','الدهون المشبعة','الدهون المتحولة','الكربوهيدرات','السكريات','الألياف الغذائية','الصوديوم','الملح','البوتاسيوم','الغلوتين','غير مكتشف'],rtl:1},
- fr:{n:'French',t:['Valeurs nutritionnelles moyennes','Portions par emballage','Taille de la portion','Par portion','Pour 100 g','Énergie','Protéines','Matières grasses','dont acides gras saturés','dont acides gras trans','Glucides','dont sucres','Fibres alimentaires','Sodium','Sel','Potassium','Gluten','Non détecté'],dc:1},
- ms:{n:'Malay',t:['Maklumat Pemakanan','Bilangan hidangan per bekas','Saiz hidangan','Setiap hidangan','Setiap 100 g','Tenaga','Protein','Lemak','Lemak tepu','Lemak trans','Karbohidrat','Gula','Serat diet','Natrium','Garam','Kalium','Gluten','Tidak dikesan']},
- th:{n:'Thai',t:['ข้อมูลโภชนาการ','จำนวนหน่วยบริโภคต่อภาชนะบรรจุ','หนึ่งหน่วยบริโภค','ต่อหนึ่งหน่วยบริโภค','ต่อ 100 กรัม','พลังงาน','โปรตีน','ไขมันทั้งหมด','ไขมันอิ่มตัว','ไขมันทรานส์','คาร์โบไฮเดรตทั้งหมด','น้ำตาล','ใยอาหาร','โซเดียม','เกลือ','โพแทสเซียม','กลูเตน','ตรวจไม่พบ'],note:'Thailand has its own required panel format (Notification 467). Check before use.'},
- zh:{n:'Chinese (Simplified)',t:['营养成分表','每包装份数','每份','每份','每100克','能量','蛋白质','脂肪','饱和脂肪','反式脂肪','碳水化合物','糖','膳食纤维','钠','盐','钾','麸质','未检出'],note:'China’s panel needs an NRV% column (GB 28050). Not shown here yet.'},
- vi:{n:'Vietnamese',t:['Thông tin dinh dưỡng','Số khẩu phần trong bao bì','Khẩu phần','Mỗi khẩu phần','Trong 100 g','Năng lượng','Chất đạm','Chất béo','Chất béo bão hòa','Chất béo chuyển hóa','Carbohydrate','Đường','Chất xơ','Natri','Muối','Kali','Gluten','Không phát hiện'],dc:1},
- id:{n:'Indonesian',t:['Informasi Nilai Gizi','Sajian per kemasan','Takaran saji','Per sajian','Per 100 g','Energi total','Protein','Lemak total','Lemak jenuh','Lemak trans','Karbohidrat total','Gula','Serat pangan','Natrium','Garam','Kalium','Gluten','Tidak terdeteksi'],dc:1},
- ro:{n:'Romanian',t:['Declarație nutrițională','Porții per ambalaj','Mărimea porției','Per porție','La 100 g','Valoare energetică','Proteine','Grăsimi','din care acizi grași saturați','din care acizi grași trans','Glucide','din care zaharuri','Fibre','Sodiu','Sare','Potasiu','Gluten','Nedetectat'],dc:1},
- sl:{n:'Slovenian',t:['Hranilna vrednost','Število porcij v pakiranju','Velikost porcije','Na porcijo','Na 100 g','Energijska vrednost','Beljakovine','Maščobe','od tega nasičene maščobne kisline','od tega transmaščobne kisline','Ogljikovi hidrati','od tega sladkorji','Prehranske vlaknine','Natrij','Sol','Kalij','Gluten','Ni zaznan'],dc:1}};
+ es:{n:'Spain',lang:'Spanish',ev:'legal',src:EU_SRC,en:'both',salt:'salt',dc:1,uv:EU_UV,
+  t:['Información nutricional','Porciones por envase','Porción','Por porción','Por 100 g','Valor energético','Proteínas','Grasas','de las cuales ácidos grasos saturados','de las cuales ácidos grasos trans','Hidratos de carbono','de los cuales azúcares','Fibra alimentaria','Sodio','Sal','Potasio']},
+ de:{n:'Germany',lang:'German',ev:'legal',src:EU_SRC,en:'both',salt:'salt',dc:1,uv:EU_UV,
+  t:['Nährwertangaben','Portionen pro Packung','Portion','Pro Portion','Pro 100 g','Energie','Eiweiß','Fett','davon gesättigte Fettsäuren','davon Transfettsäuren','Kohlenhydrate','davon Zucker','Ballaststoffe','Natrium','Salz','Kalium']},
+ fr:{n:'France',lang:'French',ev:'legal',src:EU_SRC,en:'both',salt:'salt',dc:1,uv:EU_UV,
+  t:['Valeurs nutritionnelles moyennes','Portions par emballage','Portion','Par portion','Pour 100 g','Énergie','Protéines','Matières grasses','dont acides gras saturés','dont acides gras trans','Glucides','dont sucres','Fibres alimentaires','Sodium','Sel','Potassium']},
+ da:{n:'Denmark',lang:'Danish',ev:'legal',src:EU_SRC,en:'both',salt:'salt',dc:1,uv:EU_UV,
+  t:['Næringsindhold','Portioner pr. pakning','Portion','Pr. portion','Pr. 100 g','Energi','Protein','Fedt','heraf mættede fedtsyrer','heraf transfedtsyrer','Kulhydrat','heraf sukkerarter','Kostfibre','Natrium','Salt','Kalium']},
+ ro:{n:'Romania',lang:'Romanian',ev:'legal',src:EU_SRC,en:'both',salt:'salt',dc:1,uv:EU_UV,
+  t:['Declarație nutrițională','Porții per ambalaj','Porție','Per porție','La 100 g','Valoare energetică','Proteine','Grăsimi','din care acizi grași saturați','din care acizi grași trans','Glucide','din care zaharuri','Fibre','Sodiu','Sare','Potasiu']},
+ sl:{n:'Slovenia',lang:'Slovenian',ev:'legal',src:EU_SRC,en:'both',salt:'salt',dc:1,uv:EU_UV,
+  t:['Hranilna vrednost','Število porcij v pakiranju','Porcija','Na porcijo','Na 100 g','Energijska vrednost','Beljakovine','Maščobe','od tega nasičene maščobe','od tega transmaščobe','Ogljikovi hidrati','od tega sladkorji','Prehranske vlaknine','Natrij','Sol','Kalij']},
+ cl:{n:'Chile',lang:'Spanish',ev:'legal',src:'Chile DS 977/96, art. 115',en:'kcal',salt:'sodium',dc:1,uv:['title','spp','potassium_mg'],
+  t:['Información nutricional','Porciones por envase','Porción','1 porción','100 g','Energía','Proteínas','Grasas totales','Ácidos grasos saturados','Ácidos grasos trans','Hidratos de carbono disponibles','Azúcares totales','Fibra dietética','Sodio','Sal','Potasio'],note:'Chile also needs the black “ALTO EN” warning seals where limits are passed.'},
+ gt:{n:'Guatemala',lang:'Spanish',ev:'example',src:'RTCA nutrition labelling, Annex A (informative)',en:'both',salt:'sodium',dc:1,uv:['potassium_mg'],
+  t:['Información nutricional','Porciones por envase','Tamaño de porción','Por porción','Cantidad por 100 g','Valor energético','Proteína total','Grasa total','Grasa saturada','Ácidos grasos trans','Carbohidratos','Azúcares','Fibra dietética','Sodio','Sal','Potasio'],note:'kJ is required; kcal is optional.'},
+ pa:{n:'Panama',lang:'Spanish',ev:'unverified',src:'No official wording found yet',en:'both',salt:'sodium',
+  t:['Información nutricional','Porciones por envase','Tamaño de porción','Por porción','Por 100 g','Energía','Proteína','Grasa total','Grasa saturada','Grasa trans','Carbohidratos','Azúcares','Fibra dietética','Sodio','Sal','Potasio'],note:'On hold: wording and number format not confirmed.'},
+ ms:{n:'Malaysia',lang:'Malay',ev:'legal',src:'Food Regulations 1985, reg. 18B',en:'both',salt:'sodium',uv:['spp','potassium_mg'],
+  t:['Maklumat Pemakanan','Bilangan hidangan per bekas','Saiz hidangan','Bagi setiap hidangan','Bagi setiap 100 g','Tenaga','Protein','Lemak','Asid lemak tepu','Asid lemak trans','Karbohidrat','Jumlah gula','Serabut diet','Natrium','Garam','Kalium']},
+ id:{n:'Indonesia',lang:'Indonesian',ev:'legal',src:'BPOM Regulation 10/2026',en:'kcal',salt:'sodium',dc:1,um:{kcal:'kkal'},uv:[],
+  t:['INFORMASI NILAI GIZI','Sajian per kemasan','Takaran saji','JUMLAH PER SAJIAN','JUMLAH PER 100 g','Energi total','Protein','Lemak total','Lemak jenuh','Lemak trans','Karbohidrat total','Gula total','Serat pangan','Garam (Natrium)','Garam','Kalium'],note:'Needs a %AKG column. Not shown here yet.'},
+ vi:{n:'Vietnam',lang:'Vietnamese',ev:'legal',src:'Circular 29/2023/TT-BYT',en:'kcal',salt:'sodium',dc:1,uv:['title','spp','ss','ps','p100','fat_trans_g','dietary_fibre_g','potassium_mg'],
+  t:['Thông tin dinh dưỡng','Số khẩu phần trong bao bì','Khẩu phần','Mỗi khẩu phần','Trong 100 g','Năng lượng','Chất đạm','Chất béo','Chất béo bão hòa','Chất béo chuyển hóa','Carbohydrat','Đường tổng số','Chất xơ','Natri','Muối','Kali']},
+ th:{n:'Thailand',lang:'Thai',ev:'legal',src:'MoPH Notification 445, as amended by 467',en:'kcal',salt:'sodium',um:{g:'ก.',mg:'มก.',kcal:'กิโลแคลอรี'},uv:['spp','ss'],
+  t:['ข้อมูลโภชนาการ','จำนวนหน่วยบริโภคต่อภาชนะบรรจุ','หนึ่งหน่วยบริโภค','คุณค่าทางโภชนาการต่อการกินหนึ่งครั้ง','คุณค่าทางโภชนาการต่อ 100 กรัม','พลังงาน','โปรตีน','ไขมันทั้งหมด','ไขมันอิ่มตัว','ไขมันทรานส์','คาร์โบไฮเดรตทั้งหมด','น้ำตาลทั้งหมด','ใยอาหาร','โซเดียม','เกลือ','โพแทสเซียม'],note:'Thailand has its own required panel layout and a %Thai RDI column. Not shown here yet.'},
+ zh:{n:'China',lang:'Chinese (Simplified)',ev:'legal',src:'GB 28050-2011 (the 2025 edition applies from 16 Mar 2027)',en:'kJ',salt:'sodium',um:{kJ:'千焦（kJ）',g:'克（g）',mg:'毫克（mg）'},uv:['spp','ss'],
+  t:['营养成分表','每包装份数','每份','每份','每100克（g）','能量','蛋白质','脂肪','饱和脂肪（酸）','反式脂肪（酸）','碳水化合物','糖','膳食纤维','钠','盐','钾'],note:'Needs an NRV% column. Not shown here yet.'},
+ sa:{n:'Saudi Arabia',lang:'Arabic',ev:'example',src:'SFDA nutrition labelling guide (illustration)',en:'kcal',salt:'sodium',rtl:1,uv:['potassium_mg'],
+  t:['حقائق تغذوية','عدد الحصص في العبوة','حجم الحصة','لكل حصة','لكل 100 غرام','الطاقة','بروتين','الدهون الكلية','دهون مشبعة','دهون متحولة','الكربوهيدرات الكلية','سكريات كلية','الألياف الغذائية','صوديوم','ملح','البوتاسيوم'],note:'Needs a daily-needs % column. Not shown here yet.'},
+ ae:{n:'United Arab Emirates',lang:'Arabic',ev:'unverified',src:'No official wording found yet. Not the same as Saudi Arabia.',en:'both',salt:'sodium',rtl:1,
+  t:['معلومات غذائية','عدد الحصص في العبوة','حجم الحصة','لكل حصة','لكل 100 غ','الطاقة','البروتين','الدهون الكلية','الدهون المشبعة','الدهون المتحولة','الكربوهيدرات','السكريات','الألياف الغذائية','الصوديوم','الملح','البوتاسيوم']}};
+const EV_LABEL={legal:'Legal wording',example:'Official example',unverified:'Unverified'};
 const trT=(lang,key)=>TR[lang].t[TR_KEYS.indexOf(key)];
-const EN_T=['Nutrition Information','Servings per package','Serving size','Per serving','Per 100 g','Energy','Protein','Fat, total','– saturated','– trans','Carbohydrate','– sugars','Dietary fibre','Sodium','Salt','Potassium','Gluten','Not detected'];
+const trUv=(lang,key)=>TR[lang].ev==='unverified'||(TR[lang].uv||[]).includes(key);
+const EN_T=['Nutrition Information','Servings per package','Serving size','Per serving','Per 100 g','Energy','Protein','Fat, total','– saturated','– trans','Carbohydrate','– sugars','Dietary fibre','Sodium','Salt','Potassium'];
 function trNum(v,lang,q){if(v==null)return '—';let s=fmt(v);if(TR[lang].dc)s=s.replace('.',',');return (q==='<'?'<':'')+s;}
-function trRows(p){const x=p.extracted||{nutrients:{}};return NUTS.filter(({k})=>{const n=x.nutrients[k];return n&&(n.perServing!=null||n.per100!=null);}).map(({k})=>({k,n:x.nutrients[k]}));}
-function trCell(n,c,lang,k){const v=n[c];if(v==null)return '—';const u=n.unit;const base=trNum(v,lang,n.q?.[c])+' '+(u==='kJ'?'kJ':u);
- return k==='energy_kj'&&u==='kJ'?`${base} (${trNum(Math.round(v/4.184),lang)} kcal)`:base;}
-function trText(p,lang){const x=p.extracted;const rows=trRows(p);const L=[trT(lang,'title'),`${trT(lang,'spp')}: ${x.servingsPerPack||'—'}`,`${trT(lang,'ss')}: ${trNum(x.servingSize?.value,lang)} ${x.servingSize?.unit||'g'}`,`\t${trT(lang,'ps')}\t${trT(lang,'p100')}`];
- for(const {k,n} of rows)L.push(`${trT(lang,k)}\t${trCell(n,'perServing',lang,k)}\t${trCell(n,'per100',lang,k)}`);
- if(x.glutenNotDetected)L.push(`${trT(lang,'gluten')}\t${trT(lang,'nd')}\t${trT(lang,'nd')}`);return L.join('\n');}
+const trU=(lang,u)=>(TR[lang].um||{})[u]||u;
+// Rows for this market. EU panels show salt, not sodium: salt = sodium × 2.5 when the pack only gives sodium.
+function trRows(p,lang){const x=p.extracted||{nutrients:{}};const L=TR[lang]||{};const has=n=>n&&(n.perServing!=null||n.per100!=null);const out=[];
+ for(const {k} of NUTS){let n=x.nutrients[k];
+  if(L.salt==='salt'&&k==='sodium_mg'){if(!has(x.nutrients.salt_g)&&has(n)){const c=v=>v==null?null:Math.round(v*2.5/10)/100;out.push({k:'salt_g',n:{unit:'g',perServing:c(n.perServing),per100:c(n.per100),q:n.q},calc:1});}continue;}
+  if(L.salt==='sodium'&&k==='salt_g')continue;
+  if(has(n))out.push({k,n});}
+ return out;}
+function trCell(n,c,lang,k){const v=n[c];if(v==null)return '—';const u=n.unit;const L=TR[lang];
+ if(k==='energy_kj'){const kj=u==='kcal'?v*4.184:v,kc=Math.round(kj/4.184),q=n.q?.[c];
+  const a=trNum(Math.round(kj),lang,q)+' '+trU(lang,'kJ'),b=trNum(kc,lang,q)+' '+trU(lang,'kcal');
+  return L.en==='kcal'?b:L.en==='kJ'?a:`${a} (${b})`;}
+ return trNum(v,lang,n.q?.[c])+' '+trU(lang,u);}
+function trText(p,lang){const x=p.extracted;const L=TR[lang];const rows=trRows(p,lang);
+ const out=[trT(lang,'title'),`${trT(lang,'spp')}: ${x.servingsPerPack?(L.dc?String(x.servingsPerPack).replace('.',','):x.servingsPerPack):'—'}`,`${trT(lang,'ss')}: ${trNum(x.servingSize?.value,lang)} ${trU(lang,x.servingSize?.unit||'g')}`,`\t${trT(lang,'ps')}\t${trT(lang,'p100')}`];
+ for(const {k,n} of rows)out.push(`${trT(lang,k)}\t${trCell(n,'perServing',lang,k)}\t${trCell(n,'per100',lang,k)}`);
+ const uv=['title','spp','ss','ps','p100',...rows.map(r=>r.k)].filter(k=>trUv(lang,k)).map(k=>trT(lang,k));
+ out.push('',`Wording: ${EV_LABEL[L.ev]} · ${L.src}`);if(uv.length)out.push(`Not confirmed: ${uv.join(', ')}`);
+ if(rows.some(r=>r.calc))out.push('Salt worked out from sodium (× 2.5).');return out.join('\n');}
 const trLangs=()=>Object.keys(TR).filter(c=>(S.trLangs||['es']).includes(c));
 function vTranslate(){const ps=Object.values(S.products).filter(p=>p.extracted).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
  if(!ps.length)return `<div class="panel stack"><h1>Translate a panel</h1><p class="muted" style="margin:0">Check a pack first. Its nutrition panel can then be translated here.</p><div><button class="primary" data-act="nav" data-v="quick">Check a pack</button></div></div>`;
- const p=S.products[S.trPid]||ps[0];const langs=trLangs();const x=p.extracted;const rows=trRows(p);const en=S.trEn;
- const panel=lang=>{const L=TR[lang];const lab=(key)=>`${esc(trT(lang,key))}${en?`<span class="tr-en">${esc(EN_T[TR_KEYS.indexOf(key)])}</span>`:''}`;
-  return `<div class="stack" style="gap:6px"><div class="spread"><span class="label">${esc(L.n)}</span>${L.note?`<span class="small muted" style="text-align:right">${esc(L.note)}</span>`:''}</div>
-  <div class="nipcard trcard" dir="${L.rtl?'rtl':'ltr'}" lang="${lang}"><div class="niphead">${lab('title')}</div>
-  <div class="small" style="margin:6px 0">${lab('spp')}: ${esc(x.servingsPerPack||'—')}<br>${lab('ss')}: ${esc(trNum(x.servingSize?.value,lang))} ${esc(x.servingSize?.unit||'g')}</div>
+ const p=S.products[S.trPid]||ps[0];const langs=trLangs();const x=p.extracted;const en=S.trEn;
+ const panel=lang=>{const L=TR[lang];const rows=trRows(p,lang);
+  const lab=(key)=>`${esc(trT(lang,key))}${trUv(lang,key)?'<sup class="tr-uv" title="Wording not confirmed">?</sup>':''}${en?`<span class="tr-en">${esc(EN_T[TR_KEYS.indexOf(key)])}</span>`:''}`;
+  return `<div class="stack" style="gap:6px"><div class="spread"><span class="label">${esc(L.n)} · ${esc(L.lang)}</span><span class="tr-ev tr-ev-${L.ev}">${esc(EV_LABEL[L.ev])}</span></div>
+  <div class="small muted">${esc(L.src)}${L.note?' · '+esc(L.note):''}</div>
+  <div class="nipcard trcard" dir="${L.rtl?'rtl':'ltr'}" lang="${esc(TRLANG[L.lang]||'')}"><div class="niphead">${lab('title')}</div>
+  <div class="small" style="margin:6px 0">${lab('spp')}: ${esc(x.servingsPerPack?(L.dc?String(x.servingsPerPack).replace('.',','):x.servingsPerPack):'—')}<br>${lab('ss')}: ${esc(trNum(x.servingSize?.value,lang))} ${esc(trU(lang,x.servingSize?.unit||'g'))}</div>
   <table class="nip trtab"><thead><tr><th></th><th class="n">${lab('ps')}</th><th class="n">${lab('p100')}</th></tr></thead><tbody>
-  ${rows.map(({k,n})=>`<tr><td>${lab(k)}</td><td class="n" dir="ltr">${esc(trCell(n,'perServing',lang,k))}</td><td class="n" dir="ltr">${esc(trCell(n,'per100',lang,k))}</td></tr>`).join('')}
-  ${x.glutenNotDetected?`<tr><td>${lab('gluten')}</td><td class="n">${esc(trT(lang,'nd'))}</td><td class="n">${esc(trT(lang,'nd'))}</td></tr>`:''}</tbody></table></div></div>`;};
+  ${rows.map(({k,n,calc})=>`<tr><td>${lab(k)}${calc?'<span class="tr-en">from sodium × 2.5</span>':''}</td><td class="n" dir="ltr">${esc(trCell(n,'perServing',lang,k))}</td><td class="n" dir="ltr">${esc(trCell(n,'per100',lang,k))}</td></tr>`).join('')}
+  </tbody></table></div></div>`;};
  return `<div class="stack" style="max-width:760px;margin:0 auto">
  <h1 style="margin:0">Translate a panel</h1>
  <label class="fld">Pack<select data-tr="pid">${ps.map(q=>`<option value="${q.id}" ${q.id===p.id?'selected':''}>${esc(q.name||'Pack check')}${q.sku?' · '+esc(q.sku):''}</option>`).join('')}</select></label>
- <div class="stack" style="gap:6px"><span class="small muted">Choose one or more languages. A panel is made for each.</span>
- <div class="mchips">${Object.entries(TR).map(([c,v])=>`<button class="mchip" data-act="trLang" data-v="${c}" aria-pressed="${langs.includes(c)}">${esc(v.n)}</button>`).join('')}</div>
+ <div class="stack" style="gap:6px"><span class="small muted">Choose one or more markets. A panel is made for each, in that market's wording.</span>
+ <div class="mchips">${Object.entries(TR).map(([c,v])=>`<button class="mchip" data-act="trLang" data-v="${c}" aria-pressed="${langs.includes(c)}">${esc(v.n)} <span class="muted">· ${esc(v.lang)}</span></button>`).join('')}</div>
  <div class="row small"><button class="ghost small" data-act="trAll">Select all</button><button class="ghost small" data-act="trNone">Clear</button></div></div>
  <div class="banner warn small"><b>Draft · translation not verified.</b> A native speaker and QA must check every word, and each country's panel format, before artwork.${p.confirmed?'':' The values haven\'t been confirmed against the pack yet.'}</div>
  ${openFlags(p).length?`<div class="banner err small"><b>${openFlags(p).length} number${openFlags(p).length>1?'s':''} on this pack still need fixing.</b> <button class="mini" data-act="open" data-id="${p.id}">Fix them</button></div>`:''}
  ${langs.length?langs.map(panel).join(''):`<div class="panel small muted">Choose a language above.</div>`}
  <div class="row"><button class="primary" data-act="trCopy" ${langs.length?'':'disabled'}>Copy ${langs.length>1?'all':''}</button><button data-act="trCsv" ${langs.length?'':'disabled'}>Download CSV</button><label class="chk small" style="margin-left:auto"><input type="checkbox" data-tr="en" ${en?'checked':''}><span>Show English</span></label></div>
- <p class="small muted" style="margin:0">Numbers are the checked values from the pack. Energy in kcal is kJ ÷ 4.184.${x.ingredientsText?' Ingredients aren\'t translated here yet.':''}</p></div>`;}
+ <p class="small muted" style="margin:0"><sup class="tr-uv">?</sup> = wording not confirmed by an official source. Numbers are the checked values from the pack. Energy in kcal is kJ ÷ 4.184; each market shows kJ, kcal or both as its rules say. A gluten or “not detected” line isn't added: check each market's rules first.${x.ingredientsText?' Ingredients aren\'t translated here yet.':''}</p></div>`;}
+const TRLANG={Spanish:'es',German:'de',French:'fr',Danish:'da',Romanian:'ro',Slovenian:'sl',Malay:'ms',Indonesian:'id',Vietnamese:'vi',Thai:'th','Chinese (Simplified)':'zh-Hans',Arabic:'ar'};
 document.addEventListener('change',e=>{const s=e.target.closest&&e.target.closest('[data-tr]');if(!s)return;if(s.dataset.tr==='pid')S.trPid=s.value;if(s.dataset.tr==='en')S.trEn=s.checked;render();});
 
 /* ---------- import from a spreadsheet (one row per SKU) ---------- */
@@ -1780,7 +1829,7 @@ document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-ac
  case 'trAll':S.trLangs=Object.keys(TR);break;
  case 'trNone':S.trLangs=[];break;
  case 'trCopy':case 'trCsv':{const ps=Object.values(S.products).filter(q=>q.extracted).sort((a,c)=>(c.updatedAt||'').localeCompare(a.updatedAt||''));const q=S.products[S.trPid]||ps[0];const langs=trLangs();if(!q||!langs.length)return;
-  const txt='DRAFT · translation not verified\n\n'+langs.map(l=>`[${TR[l].n}]\n`+trText(q,l)).join('\n\n');
+  const txt='DRAFT · translation not verified\n\n'+langs.map(l=>`[${TR[l].n} · ${TR[l].lang}]\n`+trText(q,l)).join('\n\n');
   if(a==='trCopy'){try{await navigator.clipboard.writeText(txt);toast('Copied. Draft wording: check before use.');}catch(e){toast('Couldn\'t copy on this device.');}return;}
   saveFile(`panels-${langs.length>1?langs.length+'-languages':langs[0]}-${(q.sku||'draft').replace(/[^\w-]+/g,'_')}.csv`,'﻿'+txt.split('\n').map(l=>l.split('\t').map(c=>/[",]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c).join(',')).join('\r\n'),'text/csv');return;}
  case 'qImport':S.imp=null;S.view='import';window.scrollTo(0,0);break;
