@@ -1475,8 +1475,12 @@ async function prepCanvas(blob,angleDeg=0,mode='adaptive'){const bmp=await creat
  x.fillStyle='#fff';x.fillRect(0,0,W,H);x.imageSmoothingQuality='high';
  if(angleDeg){x.translate(W/2,H/2);x.rotate(angleDeg*Math.PI/180);x.drawImage(bmp,-W/2,-H/2,W,H);x.setTransform(1,0,0,1,0,0);}else x.drawImage(bmp,0,0,W,H);
  const im=x.getImageData(0,0,W,H),d=im.data;const g=new Float32Array(W*H);for(let i=0,j=0;i<d.length;i+=4,j++)g[j]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
- // Light text on a dark panel (e.g. white on brown): flip it so the text is dark, which the reader expects.
- {let s=0,n=0;for(let j=0;j<g.length;j+=97){s+=g[j];n++;}if(s/n<105)for(let j=0;j<g.length;j++)g[j]=255-g[j];}
+ // Light text on a dark or coloured panel (white on brown, white on orange): flip it so the text is dark, which the
+ // reader expects. Text is the small part of the photo that stands out from the background, so if much more of the
+ // photo is far brighter than the middle tone than far darker, the text is light.
+ {let s=0,n=0;const sm=[];for(let j=0;j<g.length;j+=97){s+=g[j];n++;sm.push(g[j]);}sm.sort((a,b)=>a-b);const md=sm[sm.length>>1];let br=0,dk=0;
+  for(const v of sm){if(v>md+40)br++;else if(v<md-40)dk++;}
+  if(s/n<105||(br>sm.length*.01&&br>3*dk))for(let j=0;j<g.length;j++)g[j]=255-g[j];}
  if(mode==='gray'){const sorted=Float32Array.from(g).sort();const lo=sorted[Math.floor(g.length*.02)],hi=sorted[Math.floor(g.length*.98)],span=Math.max(1,hi-lo);
   for(let j=0,k=0;j<g.length;j++,k+=4){const v=Math.max(0,Math.min(255,(g[j]-lo)*255/span));d[k]=d[k+1]=d[k+2]=v;}x.putImageData(im,0,0);return {canvas:c,W,H};}
  // Bradley adaptive threshold using an integral image.
@@ -1559,7 +1563,10 @@ function combineReadings(texts,cols){const ssList=[];for(const t of texts){const
   // Energy: kJ and kcal pairs both "add up"; Australian and most export panels lead with kJ, so prefer it.
   const kcalPen=g=>k==='energy_kj'&&g.n.unit==='kcal'&&[...groups.values()].some(x=>x.n.unit==='kJ'&&x.score<=1)?2.5:0;
   const pick=[...groups.values()].sort((a,b)=>(a.score+kcalPen(a)-0.8*(a.count-1))-(b.score+kcalPen(b)-0.8*(b.count-1)))[0];const n=clone(pick.n);
-  if(pick.count>=2&&n.flag?.risky&&pick.score<=3)n.flag.risky=false;base.nutrients[k]=n;}
+  if(pick.count>=2&&n.flag?.risky&&pick.score<=3)n.flag.risky=false;
+  // Another reading saw "less than" on the same number: keep it (a "<5 mg" is not an exact 5 mg).
+  for(const c of ['perServing','per100'])if(n[c]!=null&&!n.q?.[c]&&all.some(q=>{const m=q.nutrients[k];return m&&m[c]===n[c]&&m.q?.[c]==='<';}))n.q={...(n.q||{}),[c]:'<'};
+  base.nutrients[k]=n;}
  return base;}
 // Read the panel by column position: find where the number columns sit across the nutrient rows,
 // then give each number to its column. Returns lines for parseNip with explicit cells, or null.
@@ -1616,14 +1623,23 @@ function numCands(t){const s=/^0\d+$/.test(t.s)?'0.'+t.s.slice(1):t.s,out=[{v:t.
  // A thin "1" and the decimal point next to it can both vanish ("11.7" read as "17"). Try putting them back;
  // pickPair only accepts one of these if it then matches the serving size, and flags it for checking.
  if(dot<0&&/^\d{2,3}$/.test(s))for(let i=0;i<=s.length;i++){const w=s.slice(0,i)+'1'+s.slice(i);for(let j=1;j<w.length;j++)out.push({v:+(w.slice(0,j)+'.'+w.slice(j)),c:3});}
+ // In condensed fonts a 7 and a 1 look alike ("5.7" read as "5.1"). A last resort: one swap on a number that was
+ // read with its decimal point, costly enough that it only wins when nothing else fits, and always flagged.
+ if(dot>=0)for(const o of out.slice()){if(o.c>0)continue;const str=String(o.v);for(let i=0;i<str.length;i++){const ch=str[i];if(ch==='1'||ch==='7')out.push({v:+(str.slice(0,i)+(ch==='1'?'7':'1')+str.slice(i+1)),c:o.c+3});}}
  return out;}
 // Pick the per-serving / per-100 pair that agrees with the serving size, preferring the fewest changes.
-function pickPair(A,B,ss){let best=null;
+function pickPair(A,B,ss){let best=null,origFit=false;
  // Panels print grams to one decimal, so a repaired value with more decimals is less likely.
  const dp=v=>{const m=String(+v.toFixed(6)).split('.')[1];return m?m.length:0;};
  for(const a of numCands(A))for(const b of numCands(B)){if(b.v>100||a.v>ss)continue;const e=b.v*ss/100;const tol=Math.max(consTol(a.v,b.v,ss),.06);const fit=Math.abs(a.v-e)<=tol;
-  const score=(fit?0:10)+(a.c+b.c)*.3-((a.strong?1:0)+(b.strong?1:0))*.5+(dp(a.v)>1?1.5:0)+(dp(b.v)>1?1.5:0);
+  // How close it fits matters too: "70.9 / 80" only just passes for an 87.5 g serving, while "70.9 / 81.0" fits exactly.
+  // Only the part beyond printing rounding counts, so a correct panel that is merely rounded isn't "repaired".
+  const rnd=Math.max(.06,0.5*10**-decs(a.v)+0.5*10**-decs(b.v)*ss/100);const miss=Math.min(2,Math.max(0,Math.abs(a.v-e)-rnd)/rnd);
+  const score=(fit?0:10)+(a.c+b.c)*.3+miss*1.5-((a.strong?1:0)+(b.strong?1:0))*.5+(dp(a.v)>1?1.5:0)+(dp(b.v)>1?1.5:0);
+  if(a.c+b.c===0)origFit=fit;
   if(!best||score<best.score)best={a:a.v,b:b.v,score,fit,changed:(a.c+b.c)>0,cost:a.c+b.c};}
+ // The numbers as read already added up, but a repair fits better: suggest it, but a person must check.
+ if(best&&best.changed&&origFit)best.origFit=true;
  return best;}
 // How far per serving may sit from per 100 × serving size: each printed number can be off by half its last digit
 // (1.3 means 1.25–1.35), plus 3% for how the panel was calculated. Much tighter than a flat percentage.
@@ -1640,6 +1656,10 @@ function mergeNip(a,b){if(!b)return a;const out={...a,nutrients:{}};
 // Energy check: protein, fat and carbohydrate can't hold more energy than the whole food. A row that breaks this
 // usually lost a decimal point in both columns; shift it only if that makes the panel add up.
 function energyBalanceFix(nip){const ns=nip.nutrients;const en=ns.energy_kj;if(!en)return;const ssv=nip.servingSize?.value;
+ // Per serving energy unreadable (missing, 0, or wildly off) but per 100 g and the serving size are clear: work it
+ // out, and leave it for a person to confirm (the pack's own rounding may differ by a few kJ).
+ if(ssv&&en.per100>0&&!nip.perServeOnly){const e=en.per100*ssv/100;if(en.perServing==null||en.perServing<=0||en.perServing<e/4||en.perServing>e*4){const o=en.perServing;en.perServing=Math.round(e);en.q={...(en.q||{}),perServing:null};
+  en.flag={type:'blurry',risky:true,status:'open',note:`${o==null?'The per serving energy couldn\'t be read':`The per serving energy read as ${o}`}. Worked out from ${en.per100} ${en.unit} per 100 g × ${ssv} g: about ${Math.round(e)} ${en.unit}. Type the exact number from the pack.`};}}
  // Per 100 g energy unreadable or inconsistent? Per serving ÷ serving size gives it for this check (not shown on the panel).
  let p100=en.per100;if(en.perServing!=null&&ssv&&(p100==null||Math.abs(en.perServing-p100*ssv/100)>Math.max(p100*ssv/100*.04,3)))p100=en.perServing*100/ssv;
  if(p100==null)return;const E=toCanon('energy_kj',p100,en.unit);if(!E)return;
@@ -1651,12 +1671,21 @@ function energyBalanceFix(nip){const ns=nip.nutrients;const en=ns.energy_kj;if(!
  // energy wrong. If moving one row's decimal brings the energy from clearly off (>20%) to close (<8%), do that.
  // Up to three rows can be shifted (one at a time, each a clear improvement); kept only if the energy then adds up.
  {const err=()=>Math.abs(calc()-E)/E;const e0=err();const calc0=calc();
+  // Smaller miss (5–20%): one small row that lost its decimal in both columns ("1.2 / 1.4 g" fibre read as 12 / 14)
+  // still matches the serving size. If moving that row's decimal makes the energy add up almost exactly, suggest it
+  // and leave it for a person to confirm.
+  const fine=()=>{const now=err(),before=calc();if(now<=0.05||now>0.2)return;let best=null;for(const k of ['dietary_fibre_g','protein_g','fat_total_g']){const n=ns[k];if(!n||n.per100==null||n.per100<10||n.per100>40)continue;
+    const o={ps:n.perServing,p:n.per100};n.per100=+(n.per100/10).toFixed(2);if(n.perServing!=null)n.perServing=+(n.perServing/10).toFixed(2);const e1=err();n.perServing=o.ps;n.per100=o.p;
+    if(e1<0.015&&e1<now/4&&(!best||e1<best.e))best={k,e:e1};}
+   if(best){const n=ns[best.k];const o=`${n.perServing??'—'} / ${n.per100}`;n.per100=+(n.per100/10).toFixed(2);if(n.perServing!=null)n.perServing=+(n.perServing/10).toFixed(2);
+    n.flag={type:'blurry',risky:true,status:'open',note:`Read as ${o}. With that, the food would have about ${fmt(before,0)} kJ instead of the ${fmt(E,0)} kJ on the panel; with ${n.perServing??'—'} / ${n.per100} it adds up, so a decimal point was probably missed. Check against the pack.`};}};
   if(e0>0.2){const shifted=[];const sh=(n,d)=>{n.per100=+(n.per100/d).toFixed(2);if(n.perServing!=null)n.perServing=+(n.perServing/d).toFixed(2);};
    for(let it=0;it<3&&err()>0.08;it++){let best=null;const now=err();
     for(const k of ['protein_g','fat_total_g','carbohydrate_g','dietary_fibre_g']){const n=ns[k];if(!n||n.per100==null||n.per100<1||shifted.some(s=>s.k===k))continue;const o={ps:n.perServing,p:n.per100};sh(n,10);const e1=err();if(e1<now*0.7&&(!best||e1<best.e))best={k,e:e1};n.perServing=o.ps;n.per100=o.p;}
     if(!best)break;const n=ns[best.k];shifted.push({k:best.k,o:`${n.perServing??'—'} / ${n.per100}`,ps:n.perServing,p:n.per100});sh(n,10);}
-   if(shifted.length&&err()<0.08){for(const s of shifted){const n=ns[s.k];n.flag={type:'blurry',status:'open',note:`Read as ${s.o}. With that, the food would have about ${fmt(calc0,0)} kJ instead of the ${fmt(E,0)} kJ on the panel, so the decimal points were probably missed. PackPick used ${n.perServing??'—'} / ${n.per100}, which makes the energy add up. Check against the pack.`};}return;}
-   for(const s of shifted){const n=ns[s.k];n.perServing=s.ps;n.per100=s.p;}}}
+   if(shifted.length&&err()<0.08){fine();for(const s of shifted){const n=ns[s.k];n.flag={type:'blurry',status:'open',note:`Read as ${s.o}. With that, the food would have about ${fmt(calc0,0)} kJ instead of the ${fmt(E,0)} kJ on the panel, so the decimal points were probably missed. PackPick used ${n.perServing??'—'} / ${n.per100}, which makes the energy add up. Check against the pack.`};}return;}
+   for(const s of shifted){const n=ns[s.k];n.perServing=s.ps;n.per100=s.p;}}
+  else fine();}
  if(ok())return;
  for(const k of ['protein_g','carbohydrate_g','fat_total_g','dietary_fibre_g']){const n=ns[k];if(!n||n.per100==null||n.per100<10)continue;const o={ps:n.perServing,p:n.per100};
   n.per100=+fmt(n.per100/10,2);if(n.perServing!=null&&n.perServing>=1)n.perServing=+fmt(n.perServing/10,2);
@@ -1703,7 +1732,12 @@ function parseNip(lines,forcedSs){lines=splitDoubleRows(lines||[]);
   const hit=NUT_MATCH.find(([k,re])=>re.test(raw));if(!hit)continue;const k=hit[0];
   // "Energy 96 Cal 332 Cal" with the kJ figures on the line below (or above) without a label: read them together.
   if(k==='energy_kj'&&!/\d\s*kj/i.test(cleanNums(raw)))for(const nx of [lines[li+1],lines[li-1]]){if(nx&&!NUT_MATCH.some(([kk,re])=>re.test(nx.text))&&/\d\s*kj/i.test(cleanNums(nx.text))){raw=raw+'   '+nx.text;break;}}
-  const lm=raw.match(hit[1]);const rest=raw.slice(lm.index+lm[0].length).replace(/^\s*[iIl|]\s?g\b/,' 1g').replace(/^[a-z ,:.\-–]*?(?=[\d\s(<]|$)/i,'');
+  const lm=raw.match(hit[1]);let rest=raw.slice(lm.index+lm[0].length);
+  // "LESS THAN 5 mg" in a blurry or condensed font comes out as "LE HENS mg" or "LSS THK Sma": an L-word then an
+  // H-word in the number part of a row is a "less than". A "5" right after it often reads as "S".
+  const ltN=(rest.match(/\bL[A-Z]{0,4}\s+[A-Z]{0,2}H[A-Z]{0,3}\b/gi)||[]).length;
+  if(ltN)rest=rest.replace(/\bL[A-Z]{0,4}\s+[A-Z]{0,2}H[A-Z]{0,3}\b/gi,' < ').replace(/<\s*S(?=\s*m)/g,'<5');
+  rest=rest.replace(/^\s*[iIl|]\s?g\b/,' 1g').replace(/^[a-z ,:.\-–]*?(?=[\d\s(<]|$)/i,'');
   const mn=/(^|\s)[MN]\d\s*[g¢]/.test(rest);const t=cleanNums(rest.replace(/(^|\s)[MN](\d)(\s*[g¢])/g,'$111.$2$3'));
   if(out.nutrients[k]&&(out.nutrients[k].per100!=null||out.nutrients[k].perServing!=null))continue;
   let lostDot=false;
@@ -1737,9 +1771,11 @@ function parseNip(lines,forcedSs){lines=splitDoubleRows(lines||[]);
      const A=String(toks[0].s),B=String(toks[1].s);let hit=null;for(const a of [+A,...vars(A)])for(const b of [+B,...vars(B)])if(!hit&&(a!==+A||b!==+B)&&fitE(a,b))hit={a,b};
      if(hit){n.perServing=hit.a;n.per100=hit.b;n.flag={type:'blurry',note:`Read as ${A} / ${B}. In this font a 7 and a 1 look alike, so PackPick suggests ${hit.a} / ${hit.b}, which matches the serving size. Check against the pack.`,status:'open'};}}}
    if(ssz&&unit==='g'&&k!=='energy_kj'){const pk=pickPair(toks[0],toks[1],ssz);
-    if(pk&&pk.changed&&pk.fit){n.perServing=pk.a;n.per100=pk.b;n.flag={type:'blurry',risky:pk.cost>=3,note:`Read as ${toks[0].s} / ${toks[1].s}. On photos the letter "g" often reads as a 9 or 4, and decimal points get lost, so PackPick suggests ${fmt(pk.a)} / ${fmt(pk.b)}, which matches the serving size. Check against the pack.`,status:'open'};}
+    if(pk&&pk.changed&&pk.fit){n.perServing=pk.a;n.per100=pk.b;n.flag={type:'blurry',risky:pk.cost>=3||!!pk.origFit,note:`Read as ${toks[0].s} / ${toks[1].s}. On photos the letter "g" often reads as a 9 or 4, and decimal points get lost, so PackPick suggests ${fmt(pk.a)} / ${fmt(pk.b)}, which matches the serving size. Check against the pack.`,status:'open'};}
     else{const st=t=>numCands(t).find(c=>c.strong);const sa=st(toks[0]),sb=st(toks[1]);if(sa||sb){if(sa)n.perServing=sa.v;if(sb)n.per100=sb.v;n.flag={type:'blurry',note:`Read as ${toks[0].s} / ${toks[1].s}. A trailing "g" was probably read as a digit. Check this row against the pack.`,status:'open'};}}}
    if(toks.length>2&&!n.flag)n.flag={type:'conflict',note:`Found ${toks.length} numbers on this line (${toks.map(x=>x.v).join(', ')}). Used the first two. Check against the pack.`,status:'open'};}
+  // "LESS THAN 5 mg | LESS THAN 5 mg" with only one number readable: both columns say less than the same amount.
+  else if(toks.length===1&&ltN>=2&&toks[0].lt&&!single){n.perServing=n.per100=toks[0].v;n.q.perServing=n.q.per100='<';n.flag={type:'blurry',risky:true,status:'open',note:`Both columns look like "less than ${toks[0].v} ${unit}", but only one number was clear. Check against the pack.`};}
   else if(toks.length===1&&single==='ps'){n.perServing=toks[0].v;n.q.perServing=toks[0].lt?'<':null;n.flag={type:'missing',note:'Only the per-serving number was found in this row.',status:'open'};}
   else if(toks.length===1&&single==='p100'){n.per100=toks[0].v;n.q.per100=toks[0].lt?'<':null;n.flag={type:'missing',note:'Only the per 100 g number was found in this row.',status:'open'};}
   else if(toks.length===1){n.per100=toks[0].v;n.q.per100=toks[0].lt?'<':null;n.flag={type:'missing',note:'Only one number found on this line. It went into the per-100 column. Check which column it belongs to.',status:'open'};}
